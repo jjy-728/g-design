@@ -1,6 +1,7 @@
 package handlers
 
 import (
+	"log"
 	"time"
 
 	"g-design-server/config"
@@ -228,7 +229,8 @@ func Logout(c *gin.Context) {
 	}
 
 	if err := middleware.AddTokenToBlacklist(tokenStr, expireDuration); err != nil {
-		utils.InternalServerError(c, "登出失败")
+		log.Printf("AddTokenToBlacklist error: %v", err)
+		utils.InternalServerError(c, "登出失败: "+err.Error())
 		return
 	}
 

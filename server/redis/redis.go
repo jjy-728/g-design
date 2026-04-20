@@ -6,8 +6,9 @@ import (
 	"log"
 	"time"
 
-	"github.com/redis/go-redis/v9"
 	"g-design-server/config"
+
+	"github.com/redis/go-redis/v9"
 )
 
 var Client *redis.Client
@@ -16,7 +17,6 @@ var Ctx = context.Background()
 func InitRedis() error {
 	Client = redis.NewClient(&redis.Options{
 		Addr:     fmt.Sprintf("%s:%d", config.GlobalConfig.Redis.Host, config.GlobalConfig.Redis.Port),
-		Password: config.GlobalConfig.Redis.Password,
 		DB:       config.GlobalConfig.Redis.DB,
 		PoolSize: config.GlobalConfig.Redis.PoolSize,
 	})

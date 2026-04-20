@@ -52,11 +52,16 @@ export const AuthProvider = ({ children }) => {
     setUserInfo(userWithRole)
   }, [])
 
-  const logout = useCallback(() => {
+  const logout = useCallback(async () => {
+    try {
+        await request.post('/user/logout')
+    } catch (error) {
+        console.error('Logout API failed:', error)
+    }
     setUser(null)
     clearAuth()
     navigate('/login', { replace: true })
-  }, [navigate])
+}, [navigate])
 
   const updateUser = useCallback((userData) => {
     setUser(userData)
