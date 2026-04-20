@@ -1,10 +1,13 @@
 package middleware
 
 import (
+	"fmt"
 	"strings"
+	"time"
 
 	"github.com/gin-gonic/gin"
 	"g-design-server/models"
+	"g-design-server/redis"
 	"g-design-server/utils"
 )
 
@@ -24,7 +27,16 @@ func AuthMiddleware() gin.HandlerFunc {
 			return
 		}
 
-		claims, err := utils.ParseToken(parts[1])
+		token := parts[1]
+
+		blacklistKey := fmt.Sprintf("token:blacklist:%s", token)
+		if exists, _ := redis.Exists(blacklistKey); exists {
+			utils.Unauthorized(c, "令牌已失效，请重新登录")
+			c.Abort()
+			return
+		}
+
+		claims, err := utils.ParseToken(token)
 		if err != nil {
 			utils.Unauthorized(c, "无效的令牌")
 			c.Abort()
@@ -49,7 +61,13 @@ func AuthMiddleware() gin.HandlerFunc {
 		c.Set("role_id", user.RoleID)
 		c.Set("role_name", user.Role.Name)
 		c.Set("permissions", user.Role.Permissions)
+		c.Set("token", token)
 
 		c.Next()
 	}
+}
+
+func AddTokenToBlacklist(token string, expiration time.Duration) error {
+	key := fmt.Sprintf("token:blacklist:%s", token)
+	return redis.Set(key, "1", expiration)
 }

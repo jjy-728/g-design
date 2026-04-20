@@ -1,27 +1,30 @@
 import React, { useState, useEffect } from 'react'
+import { useNavigate } from 'react-router-dom'
 import {
   Card,
   Table,
   Tag,
   Button,
   Space,
-  message,
-  Modal,
+  Empty,
+  Spin,
   Descriptions
 } from 'antd'
 import {
   TrophyOutlined,
   EyeOutlined,
-  CheckCircleOutlined
+  CheckCircleOutlined,
+  ClockCircleOutlined,
+  FileTextOutlined
 } from '@ant-design/icons'
 import request from '@/utils/request'
 import dayjs from 'dayjs'
+import './ExamHistory.css'
 
 const ExamHistory = () => {
+  const navigate = useNavigate()
   const [loading, setLoading] = useState(true)
   const [history, setHistory] = useState([])
-  const [selectedRecord, setSelectedRecord] = useState(null)
-  const [detailModalVisible, setDetailModalVisible] = useState(false)
 
   useEffect(() => {
     fetchHistory()
@@ -30,73 +33,110 @@ const ExamHistory = () => {
   const fetchHistory = async () => {
     try {
       setLoading(true)
-      const response = await request.get('/exams/history')
+      const response = await request.get('/exam-records/history')
       setHistory(response.list || [])
     } catch (error) {
       console.error('Fetch history error:', error)
-      message.error('加载考试记录失败')
+      setHistory([])
     } finally {
       setLoading(false)
     }
   }
 
-  const handleViewDetail = (record) => {
-    setSelectedRecord(record)
-    setDetailModalVisible(true)
+  const handleViewResult = (recordId) => {
+    navigate(`/student/exam-result/${recordId}`)
+  }
+
+  const formatTime = (seconds) => {
+    if (!seconds) return '-'
+    const minutes = Math.floor(seconds / 60)
+    const secs = seconds % 60
+    return `${minutes}分${secs}秒`
+  }
+
+  const getStatusTag = (record) => {
+    if (!record.scoreReleased) {
+      if (record.gradingStatus === 'pending') {
+        return <Tag color="processing">评阅中</Tag>
+      }
+      return <Tag color="warning">待发布</Tag>
+    }
+    return record.isPassed ? (
+      <Tag icon={<CheckCircleOutlined />} color="success">及格</Tag>
+    ) : (
+      <Tag color="error">不及格</Tag>
+    )
+  }
+
+  const getScoreDisplay = (record) => {
+    if (!record.scoreReleased) {
+      return <span style={{ color: '#999' }}>-</span>
+    }
+    if (!record.totalScore) {
+      return <span style={{ color: '#999' }}>-</span>
+    }
+    const exam = record.exam
+    const score = record.totalScore
+    const total = exam?.totalScore || 100
+    const passScore = exam?.passScore || 60
+    const color = score >= passScore ? '#52c41a' : '#ff4d4f'
+    
+    return (
+      <Space>
+        <span style={{ 
+          color: color,
+          fontWeight: 'bold',
+          fontSize: 16
+        }}>
+          {score.toFixed(1)}
+        </span>
+        <span style={{ color: '#8c8c8c' }}>/ {total}</span>
+      </Space>
+    )
   }
 
   const columns = [
     {
       title: '考试名称',
-      dataIndex: 'examTitle',
-      key: 'examTitle'
-    },
-    {
-      title: '得分',
-      dataIndex: 'score',
-      key: 'score',
-      width: 120,
-      render: (score, record) => (
+      dataIndex: ['exam', 'title'],
+      key: 'examTitle',
+      render: (title) => (
         <Space>
-          <span style={{ 
-            color: score >= record.passScore ? '#52c41a' : '#ff4d4f',
-            fontWeight: 'bold',
-            fontSize: 16
-          }}>
-            {score}
-          </span>
-          <span style={{ color: '#8c8c8c' }}>/ {record.totalScore}</span>
+          <FileTextOutlined style={{ color: '#1890ff' }} />
+          <span>{title || '-'}</span>
         </Space>
       )
     },
     {
+      title: '得分',
+      key: 'score',
+      width: 150,
+      render: (_, record) => getScoreDisplay(record)
+    },
+    {
       title: '状态',
-      dataIndex: 'status',
       key: 'status',
       width: 100,
-      render: (status, record) => {
-        if (status === 'passed') {
-          return <Tag icon={<CheckCircleOutlined />} color="success">及格</Tag>
-        } else if (status === 'failed') {
-          return <Tag color="error">不及格</Tag>
-        } else {
-          return <Tag color="default">{status}</Tag>
-        }
-      }
+      render: (_, record) => getStatusTag(record)
     },
     {
       title: '用时',
-      dataIndex: 'duration',
-      key: 'duration',
+      dataIndex: 'timeUsed',
+      key: 'timeUsed',
       width: 120,
-      render: (duration) => `${Math.floor(duration / 60)}分${duration % 60}秒`
+      render: (timeUsed) => (
+        <Space>
+          <ClockCircleOutlined style={{ color: '#1890ff' }} />
+          <span>{formatTime(timeUsed)}</span>
+        </Space>
+      )
     },
     {
       title: '交卷时间',
       dataIndex: 'submitTime',
       key: 'submitTime',
       width: 180,
-      render: (time) => dayjs(time).format('YYYY-MM-DD HH:mm:ss')
+      render: (time) => time ? dayjs(time).format('YYYY-MM-DD HH:mm:ss') : '-'
     },
     {
       title: '操作',
@@ -106,7 +146,7 @@ const ExamHistory = () => {
         <Button
           type="link"
           icon={<EyeOutlined />}
-          onClick={() => handleViewDetail(record)}
+          onClick={() => handleViewResult(record.id)}
         >
           查看详情
         </Button>
@@ -115,108 +155,46 @@ const ExamHistory = () => {
   ]
 
   return (
-    <div className="page-container">
+    <div className="exam-history-container">
       <div className="page-header">
         <h1 className="page-title">
           <TrophyOutlined /> 考试记录
         </h1>
       </div>
 
-      <Card>
-        <Table
-          loading={loading}
-          columns={columns}
-          dataSource={history}
-          rowKey="id"
-          pagination={{
-            showSizeChanger: true,
-            showQuickJumper: true,
-            showTotal: (total) => `共 ${total} 条记录`
-          }}
-        />
+      <Card className="history-card">
+        <Spin spinning={loading} tip="加载中...">
+          {history.length === 0 && !loading ? (
+            <Empty
+              image={Empty.PRESENTED_IMAGE_SIMPLE}
+              description={
+                <span style={{ color: '#999' }}>
+                  暂无考试记录
+                </span>
+              }
+            >
+              <Button 
+                type="primary" 
+                onClick={() => navigate('/student/exams')}
+              >
+                去参加考试
+              </Button>
+            </Empty>
+          ) : (
+            <Table
+              columns={columns}
+              dataSource={history}
+              rowKey="id"
+              pagination={{
+                showSizeChanger: true,
+                showQuickJumper: true,
+                showTotal: (total) => `共 ${total} 条记录`,
+                pageSize: 10
+              }}
+            />
+          )}
+        </Spin>
       </Card>
-
-      <Modal
-        title="考试详情"
-        open={detailModalVisible}
-        onCancel={() => setDetailModalVisible(false)}
-        footer={[
-          <Button key="close" onClick={() => setDetailModalVisible(false)}>
-            关闭
-          </Button>
-        ]}
-        width={800}
-      >
-        {selectedRecord && (
-          <>
-            <Descriptions column={2} bordered style={{ marginBottom: 24 }}>
-              <Descriptions.Item label="考试名称" span={2}>
-                {selectedRecord.examTitle}
-              </Descriptions.Item>
-              <Descriptions.Item label="得分">
-                <Space>
-                  <span style={{ 
-                    color: selectedRecord.score >= selectedRecord.passScore ? '#52c41a' : '#ff4d4f',
-                    fontWeight: 'bold',
-                    fontSize: 20
-                  }}>
-                    {selectedRecord.score}
-                  </span>
-                  <span style={{ color: '#8c8c8c' }}>/ {selectedRecord.totalScore}</span>
-                </Space>
-              </Descriptions.Item>
-              <Descriptions.Item label="及格分数">
-                {selectedRecord.passScore}
-              </Descriptions.Item>
-              <Descriptions.Item label="考试状态">
-                {selectedRecord.status === 'passed' ? (
-                  <Tag icon={<CheckCircleOutlined />} color="success">及格</Tag>
-                ) : (
-                  <Tag color="error">不及格</Tag>
-                )}
-              </Descriptions.Item>
-              <Descriptions.Item label="用时">
-                {Math.floor(selectedRecord.duration / 60)}分{selectedRecord.duration % 60}秒
-              </Descriptions.Item>
-              <Descriptions.Item label="交卷时间" span={2}>
-                {dayjs(selectedRecord.submitTime).format('YYYY-MM-DD HH:mm:ss')}
-              </Descriptions.Item>
-            </Descriptions>
-
-            <Card title="答题详情" size="small">
-              {selectedRecord.details?.map((detail, index) => (
-                <div key={index} style={{ marginBottom: 16, paddingBottom: 16, borderBottom: '1px solid #f0f0f0' }}>
-                  <div style={{ marginBottom: 8 }}>
-                    <strong>第 {index + 1} 题</strong>
-                    <Tag color="purple" style={{ marginLeft: 8 }}>{detail.score}分</Tag>
-                    {detail.isCorrect !== undefined && (
-                      <Tag color={detail.isCorrect ? 'green' : 'red'} style={{ marginLeft: 8 }}>
-                        {detail.isCorrect ? '正确' : '错误'}
-                      </Tag>
-                    )}
-                    <span style={{ marginLeft: 8, color: '#8c8c8c' }}>得分：{detail.obtainedScore || 0}</span>
-                  </div>
-                  <div style={{ marginBottom: 8 }}>{detail.question}</div>
-                  <div style={{ marginBottom: 8 }}>
-                    <span style={{ color: '#8c8c8c' }}>您的答案：</span>
-                    <span style={{ color: detail.isCorrect ? '#52c41a' : '#ff4d4f' }}>
-                      {Array.isArray(detail.userAnswer) ? detail.userAnswer.join(', ') : detail.userAnswer || '未作答'}
-                    </span>
-                  </div>
-                  {detail.isCorrect !== undefined && (
-                    <div>
-                      <span style={{ color: '#8c8c8c' }}>正确答案：</span>
-                      <span style={{ color: '#52c41a' }}>
-                        {Array.isArray(detail.correctAnswer) ? detail.correctAnswer.join(', ') : detail.correctAnswer}
-                      </span>
-                    </div>
-                  )}
-                </div>
-              ))}
-            </Card>
-          </>
-        )}
-      </Modal>
     </div>
   )
 }

@@ -10,10 +10,16 @@ import NotFound from '@/pages/NotFound'
 import Forbidden from '@/pages/Forbidden'
 import AIQuestionGenerator from '@/pages/teacher/AIQuestionGenerator'
 import QuestionBank from '@/pages/teacher/QuestionBank'
+import ExamGenerator from '@/pages/teacher/ExamGenerator'
+import GradingList from '@/pages/teacher/GradingList'
+import GradingDetail from '@/pages/teacher/GradingDetail'
 import ExamList from '@/pages/student/ExamList'
+import ExamNotice from '@/pages/student/ExamNotice'
 import TakeExam from '@/pages/student/TakeExam'
+import ExamResult from '@/pages/student/ExamResult'
 import ExamHistory from '@/pages/student/ExamHistory'
 import UserManagement from '@/pages/admin/UserManagement'
+import ClassManagement from '@/pages/admin/ClassManagement'
 
 const AppRoutes = () => {
   return (
@@ -43,6 +49,30 @@ const AppRoutes = () => {
                   </PrivateRoute>
                 } 
               />
+              <Route 
+                path="exam-generator" 
+                element={
+                  <PrivateRoute requiredRole="teacher">
+                    <ExamGenerator />
+                  </PrivateRoute>
+                } 
+              />
+              <Route 
+                path="grading" 
+                element={
+                  <PrivateRoute requiredRole="teacher">
+                    <GradingList />
+                  </PrivateRoute>
+                } 
+              />
+              <Route 
+                path="grading/:recordId" 
+                element={
+                  <PrivateRoute requiredRole="teacher">
+                    <GradingDetail />
+                  </PrivateRoute>
+                } 
+              />
             </Route>
             
             <Route path="student">
@@ -55,10 +85,26 @@ const AppRoutes = () => {
                 } 
               />
               <Route 
-                path="exam/:id" 
+                path="exam-notice/:examId" 
+                element={
+                  <PrivateRoute requiredRole="student">
+                    <ExamNotice />
+                  </PrivateRoute>
+                } 
+              />
+              <Route 
+                path="take-exam/:recordId" 
                 element={
                   <PrivateRoute requiredRole="student">
                     <TakeExam />
+                  </PrivateRoute>
+                } 
+              />
+              <Route 
+                path="exam-result/:recordId" 
+                element={
+                  <PrivateRoute requiredRole="student">
+                    <ExamResult />
                   </PrivateRoute>
                 } 
               />
@@ -78,6 +124,14 @@ const AppRoutes = () => {
                 element={
                   <PrivateRoute requiredRole="admin">
                     <UserManagement />
+                  </PrivateRoute>
+                } 
+              />
+              <Route 
+                path="classes" 
+                element={
+                  <PrivateRoute requiredRole="admin">
+                    <ClassManagement />
                   </PrivateRoute>
                 } 
               />

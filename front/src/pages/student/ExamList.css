@@ -1,0 +1,59 @@
+.exam-list-container {
+  padding: 24px;
+}
+
+.page-header {
+  margin-bottom: 24px;
+}
+
+.page-title {
+  font-size: 24px;
+  font-weight: 600;
+  margin: 0;
+  display: flex;
+  align-items: center;
+  gap: 12px;
+}
+
+.exam-card {
+  height: 100%;
+  transition: all 0.3s;
+}
+
+.exam-card:hover {
+  box-shadow: 0 4px 12px rgba(0, 0, 0, 0.15);
+  transform: translateY(-2px);
+}
+
+.exam-card-title {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+}
+
+.exam-info {
+  margin-bottom: 16px;
+}
+
+.info-item {
+  display: flex;
+  align-items: center;
+  margin-bottom: 12px;
+  font-size: 14px;
+  color: #666;
+}
+
+.info-icon {
+  margin-right: 8px;
+  color: #1890ff;
+}
+
+.score-display {
+  margin-top: 16px;
+  padding-top: 12px;
+  border-top: 1px solid #f0f0f0;
+}
+
+.exam-actions {
+  margin-top: 16px;
+}

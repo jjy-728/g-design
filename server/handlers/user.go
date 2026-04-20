@@ -3,14 +3,15 @@ package handlers
 import (
 	"g-design-server/models"
 	"g-design-server/utils"
+	"strconv"
 
 	"github.com/gin-gonic/gin"
 )
 
 type CreateUserRequest struct {
-	Username string `json:"username" binding:"required,min=3,max=50"`
 	Password string `json:"password" binding:"required,min=6"`
 	Name     string `json:"name" binding:"required,min=2,max=50"`
+	Phone    string `json:"phone" binding:"required,len=11"`
 	Email    string `json:"email" binding:"required,email"`
 	RoleID   uint   `json:"role_id" binding:"required"`
 }
@@ -24,18 +25,44 @@ type UpdateUserRequest struct {
 
 type UserResponse struct {
 	ID        uint   `json:"id"`
-	Username  string `json:"username"`
 	Name      string `json:"name"`
+	Phone     string `json:"phone"`
 	Email     string `json:"email"`
 	RoleID    uint   `json:"role_id"`
 	RoleName  string `json:"role_name"`
+	ClassID   *uint  `json:"classId"`
 	Status    int    `json:"status"`
 	CreatedAt string `json:"created_at"`
 }
 
 func GetUsers(c *gin.Context) {
 	var users []models.User
-	if err := models.DB.Preload("Role").Find(&users).Error; err != nil {
+	var total int64
+
+	keyword := c.Query("keyword")
+	role := c.Query("role")
+	roleID := c.Query("roleId")
+	page, _ := strconv.Atoi(c.DefaultQuery("page", "1"))
+	pageSize, _ := strconv.Atoi(c.DefaultQuery("pageSize", "10"))
+
+	query := models.DB.Model(&models.User{}).Preload("Role")
+
+	if keyword != "" {
+		query = query.Where("users.name LIKE ?", "%"+keyword+"%")
+	}
+
+	if role != "" {
+		query = query.Joins("JOIN roles ON roles.id = users.role_id").Where("roles.name = ?", role)
+	}
+
+	if roleID != "" {
+		query = query.Where("users.role_id = ?", roleID)
+	}
+
+	query.Count(&total)
+
+	offset := (page - 1) * pageSize
+	if err := query.Offset(offset).Limit(pageSize).Find(&users).Error; err != nil {
 		utils.InternalServerError(c, "获取用户列表失败")
 		return
 	}
@@ -44,11 +71,12 @@ func GetUsers(c *gin.Context) {
 	for _, user := range users {
 		response = append(response, UserResponse{
 			ID:        user.ID,
-			Username:  user.Username,
 			Name:      user.Name,
+			Phone:     user.Phone,
 			Email:     user.Email,
 			RoleID:    user.RoleID,
 			RoleName:  user.Role.Name,
+			ClassID:   user.ClassID,
 			Status:    user.Status,
 			CreatedAt: user.CreatedAt.Format("2006-01-02 15:04:05"),
 		})
@@ -56,7 +84,7 @@ func GetUsers(c *gin.Context) {
 
 	utils.Success(c, gin.H{
 		"list":  response,
-		"total": len(response),
+		"total": total,
 	})
 }
 
@@ -68,8 +96,8 @@ func CreateUser(c *gin.Context) {
 	}
 
 	var existingUser models.User
-	if err := models.DB.Where("username = ?", req.Username).First(&existingUser).Error; err == nil {
-		utils.BadRequest(c, "用户名已存在")
+	if err := models.DB.Where("phone = ?", req.Phone).First(&existingUser).Error; err == nil {
+		utils.BadRequest(c, "手机号已被注册")
 		return
 	}
 
@@ -91,9 +119,10 @@ func CreateUser(c *gin.Context) {
 	}
 
 	user := models.User{
-		Username: req.Username,
+		Username: req.Phone,
 		Password: hashedPassword,
 		Name:     req.Name,
+		Phone:    req.Phone,
 		Email:    req.Email,
 		RoleID:   req.RoleID,
 		Status:   1,

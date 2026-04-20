@@ -9,7 +9,10 @@ import {
   TrophyOutlined,
   HistoryOutlined,
   UserOutlined,
-  LogoutOutlined
+  LogoutOutlined,
+  FileSearchOutlined,
+  TeamOutlined,
+  CheckCircleOutlined
 } from '@ant-design/icons'
 import { useAuth } from '@/context/AuthContext'
 import { useApp } from '@/context/AppContext'
@@ -37,6 +40,11 @@ const Sidebar = () => {
           key: '/admin/users',
           icon: <UserOutlined />,
           label: '用户管理'
+        },
+        {
+          key: '/admin/classes',
+          icon: <TeamOutlined />,
+          label: '班级管理'
         }
       )
     }
@@ -52,6 +60,16 @@ const Sidebar = () => {
           key: '/teacher/question-bank',
           icon: <BookOutlined />,
           label: '题库管理'
+        },
+        {
+          key: '/teacher/exam-generator',
+          icon: <FileSearchOutlined />,
+          label: '智能组卷'
+        },
+        {
+          key: '/teacher/grading',
+          icon: <CheckCircleOutlined />,
+          label: '待评阅试卷'
         }
       )
     }
@@ -84,7 +102,6 @@ const Sidebar = () => {
   const handleMenuClick = ({ key }) => {
     if (key === 'logout') {
       logout()
-      navigate('/login')
     } else {
       navigate(key)
     }
@@ -94,9 +111,12 @@ const Sidebar = () => {
     const path = location.pathname
     if (path.startsWith('/teacher/ai-generate')) return '/teacher/ai-generate'
     if (path.startsWith('/teacher/question-bank')) return '/teacher/question-bank'
+    if (path.startsWith('/teacher/exam-generator')) return '/teacher/exam-generator'
+    if (path.startsWith('/teacher/grading')) return '/teacher/grading'
     if (path.startsWith('/student/exams')) return '/student/exams'
     if (path.startsWith('/student/history')) return '/student/history'
     if (path.startsWith('/admin/users')) return '/admin/users'
+    if (path.startsWith('/admin/classes')) return '/admin/classes'
     return path
   }
 

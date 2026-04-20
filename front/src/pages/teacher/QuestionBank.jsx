@@ -108,7 +108,26 @@ const QuestionBank = () => {
 
   const handleEdit = (record) => {
     setEditingQuestion(record)
-    editForm.setFieldsValue(record)
+    // 回显时把选项数组转成换行字符串，并加上 A. B. C. 前缀
+    let optionsText = ''
+    if (Array.isArray(record.options)) {
+      optionsText = record.options
+        .filter(o => o.trim())
+        .map((option, idx) => {
+          const prefix = String.fromCharCode(65 + idx) + '. '
+          // 如果已经有前缀就不再重复添加
+          if (option.trim().startsWith(prefix)) {
+            return option.trim()
+          }
+          return prefix + option.trim()
+        })
+        .join('\n')
+    }
+    const formData = {
+      ...record,
+      options: optionsText
+    }
+    editForm.setFieldsValue(formData)
     setModalVisible(true)
   }
 
@@ -137,11 +156,32 @@ const QuestionBank = () => {
     try {
       const values = await editForm.validateFields()
       
+      // 处理选项：将换行字符串转为数组，选择题必填
+      let processedOptions
+      if (values.type === 'single' || values.type === 'multiple') {
+        if (!values.options || !values.options.trim()) {
+          message.error('选择题请填写选项')
+          return
+        }
+        processedOptions = values.options
+          .split('\n')
+          .filter(o => o.trim())
+          .map(o => o.replace(/^[A-Z][.．\s]+/, '').trim())
+      } else {
+        // 填空题、简答题不需要选项
+        processedOptions = undefined
+      }
+
+      const questionData = {
+        ...values,
+        options: processedOptions
+      }
+      
       if (editingQuestion) {
-        await request.put(`/questions/${editingQuestion.id}`, values)
+        await request.put(`/questions/${editingQuestion.id}`, questionData)
         message.success('更新成功')
       } else {
-        await request.post('/questions', values)
+        await request.post('/questions', questionData)
         message.success('添加成功')
       }
       
@@ -202,7 +242,7 @@ const QuestionBank = () => {
       dataIndex: 'content',
       key: 'content',
       ellipsis: true,
-      width: 300
+      width: 350
     },
     {
       title: '题型',
@@ -278,8 +318,13 @@ const QuestionBank = () => {
 
   return (
     <div className="page-container">
-      <div className="page-header">
-        <h1 className="page-title">题库管理</h1>
+      <div className="page-header" style={{ marginBottom: 16 }}>
+        <h1 className="page-title">
+          题库管理
+          <Tag color="blue" style={{ marginLeft: 12, fontSize: 12 }}>
+            仅显示本人创建的题目
+          </Tag>
+        </h1>
       </div>
 
       <Card>
@@ -390,6 +435,92 @@ const QuestionBank = () => {
           loading={loading}
           rowKey="id"
           scroll={{ x: 1200 }}
+          expandable={{
+            expandedRowRender: (record) => {
+              if (record.type === 'single' || record.type === 'multiple') {
+                return (
+                  <div style={{ padding: '16px', background: '#fafafa', borderRadius: 4 }}>
+                    <div style={{ marginBottom: 12 }}>
+                      <strong style={{ color: '#1890ff', display: 'inline-block', marginBottom: 4 }}>题目详情：</strong>
+                      <div style={{ lineHeight: 1.6, wordBreak: 'break-word', whiteSpace: 'pre-wrap' }}>
+                        {record.content}
+                      </div>
+                    </div>
+                    <div style={{ marginBottom: 12 }}>
+                      <strong style={{ display: 'inline-block', marginBottom: 8 }}>选项：</strong>
+                      <div>
+                        {Array.isArray(record.options) && record.options.map((option, idx) => (
+                          <div key={idx} style={{ 
+                            marginBottom: 8, 
+                            padding: '8px 12px',
+                            borderRadius: 4,
+                            lineHeight: 1.6,
+                            wordBreak: 'break-word',
+                            whiteSpace: 'pre-wrap',
+                            background: record.answer.toUpperCase().includes(String.fromCharCode(65 + idx)) 
+                              ? '#f6ffed' 
+                              : '#fff',
+                            border: record.answer.toUpperCase().includes(String.fromCharCode(65 + idx)) 
+                              ? '1px solid #b7eb8f' 
+                              : '1px solid #e8e8e8'
+                          }}>
+                            <span style={{ 
+                              fontWeight: 600, 
+                              color: record.answer.toUpperCase().includes(String.fromCharCode(65 + idx)) 
+                                ? '#52c41a' 
+                                : '#333',
+                              marginRight: 4
+                            }}>
+                              {String.fromCharCode(65 + idx)}.
+                            </span>
+                            {option}
+                          </div>
+                        ))}
+                      </div>
+                    </div>
+                    <div>
+                      <Tag color="success" style={{ marginBottom: 8 }}>正确答案：{record.answer}</Tag>
+                      {record.explanation && (
+                        <div style={{ 
+                          marginTop: 8, 
+                          color: '#666', 
+                          lineHeight: 1.6, 
+                          wordBreak: 'break-word',
+                          whiteSpace: 'pre-wrap'
+                        }}>
+                          <strong>解析：</strong>{record.explanation}
+                        </div>
+                      )}
+                    </div>
+                  </div>
+                )
+              }
+              return (
+                <div style={{ padding: '16px', background: '#fafafa', borderRadius: 4 }}>
+                  <div style={{ marginBottom: 12 }}>
+                    <strong style={{ color: '#1890ff', display: 'inline-block', marginBottom: 4 }}>题目详情：</strong>
+                    <div style={{ lineHeight: 1.6, wordBreak: 'break-word', whiteSpace: 'pre-wrap' }}>
+                      {record.content}
+                    </div>
+                  </div>
+                  <div>
+                    <Tag color="success" style={{ marginBottom: 8 }}>正确答案：{record.answer}</Tag>
+                    {record.explanation && (
+                      <div style={{ 
+                        marginTop: 8, 
+                        color: '#666', 
+                        lineHeight: 1.6, 
+                        wordBreak: 'break-word',
+                        whiteSpace: 'pre-wrap'
+                      }}>
+                        <strong>解析：</strong>{record.explanation}
+                      </div>
+                    )}
+                  </div>
+                </div>
+              )
+            }
+          }}
           pagination={{
             current: pagination.current,
             pageSize: pagination.pageSize,
@@ -466,10 +597,13 @@ const QuestionBank = () => {
           </Form.Item>
 
           <Form.Item
-            label="选项（每行一个，选择题必填）"
+            label="选项（每行一个，选择题必填，字母前缀自动添加）"
             name="options"
           >
-            <TextArea rows={4} placeholder="A. 选项1&#10;B. 选项2&#10;C. 选项3&#10;D. 选项4" />
+            <TextArea 
+              rows={4} 
+              placeholder="选项内容直接输入即可，自动添加 A. B. C. 前缀&#10;例如：&#10;选项1&#10;选项2&#10;选项3&#10;选项4" 
+            />
           </Form.Item>
 
           <Form.Item

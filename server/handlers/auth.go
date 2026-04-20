@@ -1,37 +1,42 @@
 package handlers
 
 import (
-	"github.com/gin-gonic/gin"
+	"time"
+
+	"g-design-server/config"
+	"g-design-server/middleware"
 	"g-design-server/models"
 	"g-design-server/utils"
+
+	"github.com/gin-gonic/gin"
 )
 
 type LoginRequest struct {
-	Username string `json:"username" binding:"required,min=3,max=50"`
+	Phone    string `json:"phone" binding:"required,len=11"`
 	Password string `json:"password" binding:"required,min=6"`
 }
 
 type RegisterRequest struct {
-	Username string `json:"username" binding:"required,min=3,max=50"`
 	Password string `json:"password" binding:"required,min=6"`
 	Name     string `json:"name" binding:"required,min=2,max=50"`
+	Phone    string `json:"phone" binding:"required,len=11"`
 	Email    string `json:"email" binding:"required,email"`
 	RoleID   uint   `json:"role_id" binding:"required"`
 }
 
 type LoginResponse struct {
-	Token string      `json:"token"`
-	User  *UserInfo  `json:"user"`
+	Token string    `json:"token"`
+	User  *UserInfo `json:"user"`
 }
 
 type UserInfo struct {
-	ID          uint                `json:"id"`
-	Username    string              `json:"username"`
-	Name        string              `json:"name"`
-	Email       string              `json:"email"`
-	RoleID      uint                `json:"role_id"`
-	RoleName    string              `json:"role"`
-	Permissions []PermissionInfo    `json:"permissions"`
+	ID          uint             `json:"id"`
+	Username    string           `json:"username"`
+	Name        string           `json:"name"`
+	Email       string           `json:"email"`
+	RoleID      uint             `json:"role_id"`
+	RoleName    string           `json:"roleName"`
+	Permissions []PermissionInfo `json:"permissions"`
 }
 
 type PermissionInfo struct {
@@ -50,13 +55,13 @@ func Login(c *gin.Context) {
 	}
 
 	var user models.User
-	if err := models.DB.Preload("Role.Permissions").Where("username = ?", req.Username).First(&user).Error; err != nil {
-		utils.Unauthorized(c, "用户名或密码错误")
+	if err := models.DB.Preload("Role.Permissions").Where("phone = ?", req.Phone).First(&user).Error; err != nil {
+		utils.Unauthorized(c, "手机号或密码错误")
 		return
 	}
 
 	if !utils.CheckPassword(req.Password, user.Password) {
-		utils.Unauthorized(c, "用户名或密码错误")
+		utils.Unauthorized(c, "手机号或密码错误")
 		return
 	}
 
@@ -65,7 +70,7 @@ func Login(c *gin.Context) {
 		return
 	}
 
-	token, err := utils.GenerateToken(user.ID, user.Username, user.RoleID)
+	token, err := utils.GenerateToken(user.ID, user.Name, user.RoleID)
 	if err != nil {
 		utils.InternalServerError(c, "生成令牌失败")
 		return
@@ -82,13 +87,25 @@ func Login(c *gin.Context) {
 		})
 	}
 
+	var role string
+	switch user.Role.Name {
+	case "管理员":
+		role = "admin"
+	case "教师":
+		role = "teacher"
+	case "学生":
+		role = "student"
+	default:
+		role = user.Role.Name
+	}
+
 	userInfo := &UserInfo{
 		ID:          user.ID,
 		Username:    user.Username,
 		Name:        user.Name,
 		Email:       user.Email,
 		RoleID:      user.RoleID,
-		RoleName:    user.Role.Name,
+		RoleName:    role,
 		Permissions: permissions,
 	}
 
@@ -106,8 +123,8 @@ func Register(c *gin.Context) {
 	}
 
 	var existingUser models.User
-	if err := models.DB.Where("username = ?", req.Username).First(&existingUser).Error; err == nil {
-		utils.BadRequest(c, "用户名已存在")
+	if err := models.DB.Where("phone = ?", req.Phone).First(&existingUser).Error; err == nil {
+		utils.BadRequest(c, "手机号已被注册")
 		return
 	}
 
@@ -129,9 +146,10 @@ func Register(c *gin.Context) {
 	}
 
 	user := models.User{
-		Username: req.Username,
+		Username: req.Phone,
 		Password: hashedPassword,
 		Name:     req.Name,
+		Phone:    req.Phone,
 		Email:    req.Email,
 		RoleID:   req.RoleID,
 		Status:   1,
@@ -168,13 +186,25 @@ func GetCurrentUser(c *gin.Context) {
 		})
 	}
 
+	var role string
+	switch u.Role.Name {
+	case "管理员":
+		role = "admin"
+	case "教师":
+		role = "teacher"
+	case "学生":
+		role = "student"
+	default:
+		role = u.Role.Name
+	}
+
 	userInfo := &UserInfo{
 		ID:          u.ID,
 		Username:    u.Username,
 		Name:        u.Name,
 		Email:       u.Email,
 		RoleID:      u.RoleID,
-		RoleName:    u.Role.Name,
+		RoleName:    role,
 		Permissions: permissions,
 	}
 
@@ -182,6 +212,26 @@ func GetCurrentUser(c *gin.Context) {
 }
 
 func Logout(c *gin.Context) {
+	token, exists := c.Get("token")
+	if !exists {
+		utils.Success(c, gin.H{
+			"message": "登出成功",
+		})
+		return
+	}
+
+	tokenStr := token.(string)
+
+	expireDuration, err := time.ParseDuration(config.GlobalConfig.JWT.Expire)
+	if err != nil {
+		expireDuration = 24 * time.Hour
+	}
+
+	if err := middleware.AddTokenToBlacklist(tokenStr, expireDuration); err != nil {
+		utils.InternalServerError(c, "登出失败")
+		return
+	}
+
 	utils.Success(c, gin.H{
 		"message": "登出成功",
 	})

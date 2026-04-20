@@ -26,10 +26,26 @@ type JWTConfig struct {
 	Expire string `yaml:"expire"`
 }
 
+type AIConfig struct {
+	APIKey  string `yaml:"api_key"`
+	BaseURL string `yaml:"base_url"`
+	Model   string `yaml:"model"`
+}
+
+type RedisConfig struct {
+	Host     string `yaml:"host"`
+	Port     int    `yaml:"port"`
+	Password string `yaml:"password"`
+	DB       int    `yaml:"db"`
+	PoolSize int    `yaml:"pool_size"`
+}
+
 type Config struct {
 	Server   ServerConfig   `yaml:"server"`
 	Database DatabaseConfig `yaml:"database"`
 	JWT      JWTConfig      `yaml:"jwt"`
+	AI       AIConfig       `yaml:"ai"`
+	Redis    RedisConfig    `yaml:"redis"`
 }
 
 var GlobalConfig *Config

@@ -1,0 +1,29 @@
+.exam-history-container {
+  padding: 24px;
+}
+
+.page-header {
+  margin-bottom: 24px;
+}
+
+.page-title {
+  font-size: 24px;
+  font-weight: 600;
+  margin: 0;
+  display: flex;
+  align-items: center;
+  gap: 12px;
+}
+
+.history-card {
+  min-height: 400px;
+}
+
+.ant-empty {
+  padding: 60px 0;
+}
+
+.ant-empty-description {
+  color: #999;
+  font-size: 14px;
+}

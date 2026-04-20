@@ -30,6 +30,10 @@ const UserManagement = () => {
   const [total, setTotal] = useState(0)
   const [modalVisible, setModalVisible] = useState(false)
   const [editingUser, setEditingUser] = useState(null)
+  const [searchValues, setSearchValues] = useState({
+    keyword: '',
+    role: ''
+  })
   const [filters, setFilters] = useState({
     keyword: '',
     role: ''
@@ -52,15 +56,15 @@ const UserManagement = () => {
   const fetchUsers = async () => {
     try {
       setLoading(true)
-      const response = await request.get('/users', {
+      const data = await request.get('/users', {
         params: {
           page: pagination.current,
           pageSize: pagination.pageSize,
           ...filters
         }
       })
-      setUsers(response.list || [])
-      setTotal(response.total || 0)
+      setUsers(data.list || [])
+      setTotal(data.total || 0)
     } catch (error) {
       console.error('Fetch users error:', error)
     } finally {
@@ -69,10 +73,12 @@ const UserManagement = () => {
   }
 
   const handleSearch = () => {
+    setFilters({ ...searchValues })
     setPagination({ ...pagination, current: 1 })
   }
 
   const handleReset = () => {
+    setSearchValues({ keyword: '', role: '' })
     setFilters({ keyword: '', role: '' })
     setPagination({ ...pagination, current: 1 })
   }
@@ -85,7 +91,10 @@ const UserManagement = () => {
 
   const handleEdit = (record) => {
     setEditingUser(record)
-    editForm.setFieldsValue(record)
+    editForm.setFieldsValue({
+      ...record,
+      role: record.role_name
+    })
     setModalVisible(true)
   }
 
@@ -132,25 +141,25 @@ const UserManagement = () => {
       width: 80
     },
     {
-      title: '用户名',
-      dataIndex: 'username',
-      key: 'username',
-      width: 150
-    },
-    {
       title: '姓名',
       dataIndex: 'name',
       key: 'name',
       width: 120
     },
     {
+      title: '手机号',
+      dataIndex: 'phone',
+      key: 'phone',
+      width: 130
+    },
+    {
       title: '角色',
-      dataIndex: 'role',
+      dataIndex: 'role_name',
       key: 'role',
       width: 100,
       render: (role) => {
         const roleInfo = roles.find(r => r.value === role)
-        return roleInfo ? <Tag color="blue">{roleInfo.label}</Tag> : role
+        return roleInfo ? <Tag color="blue">{roleInfo.label}</Tag> : <Tag color="blue">{role}</Tag>
       }
     },
     {
@@ -161,7 +170,7 @@ const UserManagement = () => {
     },
     {
       title: '创建时间',
-      dataIndex: 'createdAt',
+      dataIndex: 'created_at',
       key: 'createdAt',
       width: 180
     },
@@ -171,8 +180,8 @@ const UserManagement = () => {
       key: 'status',
       width: 100,
       render: (status) => (
-        <Tag color={status === 'active' ? 'green' : 'red'}>
-          {status === 'active' ? '正常' : '禁用'}
+        <Tag color={status === 1 ? 'green' : 'red'}>
+          {status === 1 ? '正常' : '禁用'}
         </Tag>
       )
     },
@@ -221,16 +230,17 @@ const UserManagement = () => {
         <div style={{ marginBottom: 16 }}>
           <Space wrap>
             <Input
-              placeholder="搜索用户名或姓名"
-              value={filters.keyword}
-              onChange={(e) => setFilters({ ...filters, keyword: e.target.value })}
+              placeholder="搜索姓名"
+              value={searchValues.keyword}
+              onChange={(e) => setSearchValues({ ...searchValues, keyword: e.target.value })}
               style={{ width: 200 }}
               allowClear
+              onPressEnter={handleSearch}
             />
             <Select
               placeholder="角色"
-              value={filters.role}
-              onChange={(value) => setFilters({ ...filters, role: value })}
+              value={searchValues.role}
+              onChange={(value) => setSearchValues({ ...searchValues, role: value })}
               style={{ width: 120 }}
               allowClear
             >
@@ -295,25 +305,26 @@ const UserManagement = () => {
         <Form
           form={editForm}
           layout="vertical"
-          initialValues={{ role: 'student', status: 'active' }}
+          initialValues={{ role: 'student', status: 1 }}
         >
-          <Form.Item
-            label="用户名"
-            name="username"
-            rules={[
-              { required: true, message: '请输入用户名' },
-              { min: 3, message: '用户名至少3个字符' }
-            ]}
-          >
-            <Input placeholder="请输入用户名" />
-          </Form.Item>
-
           <Form.Item
             label="姓名"
             name="name"
             rules={[{ required: true, message: '请输入姓名' }]}
           >
             <Input placeholder="请输入姓名" />
+          </Form.Item>
+
+          <Form.Item
+            label="手机号"
+            name="phone"
+            rules={[
+              { required: true, message: '请输入手机号' },
+              { len: 11, message: '请输入11位手机号' },
+              { pattern: /^1[3-9]\d{9}$/, message: '请输入正确的手机号格式' }
+            ]}
+          >
+            <Input placeholder="请输入手机号" maxLength={11} />
           </Form.Item>
 
           <Form.Item
@@ -345,6 +356,7 @@ const UserManagement = () => {
             label="邮箱"
             name="email"
             rules={[
+              { required: true, message: '请输入邮箱' },
               { type: 'email', message: '请输入有效的邮箱地址' }
             ]}
           >
@@ -357,8 +369,8 @@ const UserManagement = () => {
             rules={[{ required: true, message: '请选择状态' }]}
           >
             <Select placeholder="请选择状态">
-              <Option value="active">正常</Option>
-              <Option value="disabled">禁用</Option>
+              <Option value={1}>正常</Option>
+              <Option value={0}>禁用</Option>
             </Select>
           </Form.Item>
         </Form>

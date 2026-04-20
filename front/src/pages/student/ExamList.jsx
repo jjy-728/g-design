@@ -1,30 +1,14 @@
 import React, { useState, useEffect } from 'react'
 import { useNavigate } from 'react-router-dom'
-import {
-  Card,
-  List,
-  Tag,
-  Button,
-  Space,
-  message,
-  Modal,
-  Descriptions
-} from 'antd'
-import {
-  FileTextOutlined,
-  ClockCircleOutlined,
-  TrophyOutlined,
-  PlayCircleOutlined
-} from '@ant-design/icons'
+import { Card, List, Tag, Button, Empty, Spin } from 'antd'
+import { FileTextOutlined, ClockCircleOutlined, TrophyOutlined, PlayCircleOutlined } from '@ant-design/icons'
 import request from '@/utils/request'
-import dayjs from 'dayjs'
+import './ExamList.css'
 
 const ExamList = () => {
   const navigate = useNavigate()
   const [loading, setLoading] = useState(true)
   const [exams, setExams] = useState([])
-  const [selectedExam, setSelectedExam] = useState(null)
-  const [detailModalVisible, setDetailModalVisible] = useState(false)
 
   useEffect(() => {
     fetchExams()
@@ -33,168 +17,107 @@ const ExamList = () => {
   const fetchExams = async () => {
     try {
       setLoading(true)
-      const response = await request.get('/exams')
-      setExams(response.list || [])
+      const response = await request.get('/exam-records/available')
+      const pendingExams = (response || []).filter(exam => {
+        if (!exam.record) return true
+        return exam.record.status !== 'submitted'
+      })
+      setExams(pendingExams)
     } catch (error) {
       console.error('Fetch exams error:', error)
-      message.error('加载考试列表失败')
     } finally {
       setLoading(false)
     }
   }
 
-  const handleViewDetail = (exam) => {
-    setSelectedExam(exam)
-    setDetailModalVisible(true)
+  const handleStartExam = (exam) => {
+    navigate(`/student/exam-notice/${exam.id}`)
   }
 
-  const handleStartExam = (exam) => {
-    if (exam.status !== 'available') {
-      message.warning('该考试暂不可用')
-      return
+  const getStatusTag = (record) => {
+    if (!record) {
+      return <Tag color="green">待考</Tag>
     }
     
-    Modal.confirm({
-      title: '开始考试',
-      content: `确定要开始《${exam.title}》吗？考试时长为 ${exam.duration} 分钟。`,
-      okText: '开始考试',
-      cancelText: '取消',
-      onOk: () => {
-        navigate(`/student/exam/${exam.id}`)
-      }
-    })
-  }
-
-  const getStatusTag = (status) => {
-    const statusMap = {
-      available: { text: '可参加', color: 'green' },
-      completed: { text: '已完成', color: 'blue' },
-      expired: { text: '已过期', color: 'default' },
-      upcoming: { text: '未开始', color: 'orange' }
+    if (record.status === 'in_progress') {
+      return <Tag color="processing">进行中</Tag>
     }
-    const statusInfo = statusMap[status] || { text: status, color: 'default' }
-    return <Tag color={statusInfo.color}>{statusInfo.text}</Tag>
+    
+    return <Tag color="default">{record.status}</Tag>
   }
 
   return (
-    <div className="page-container">
+    <div className="exam-list-container">
       <div className="page-header">
         <h1 className="page-title">
           <FileTextOutlined /> 在线考试
         </h1>
       </div>
 
-      <Card>
-        <List
-          loading={loading}
-          dataSource={exams}
-          renderItem={(exam) => (
-            <List.Item
-              actions={[
-                <Button
-                  type="link"
-                  onClick={() => handleViewDetail(exam)}
-                >
-                  查看详情
-                </Button>,
-                exam.status === 'available' && (
-                  <Button
-                    type="primary"
-                    icon={<PlayCircleOutlined />}
-                    onClick={() => handleStartExam(exam)}
+      <Spin spinning={loading}>
+        {exams.length === 0 && !loading ? (
+          <Empty description="暂无可参加的考试" />
+        ) : (
+          <List
+            grid={{ gutter: 16, xs: 1, sm: 1, md: 2, lg: 2, xl: 3, xxl: 3 }}
+            dataSource={exams}
+            renderItem={(exam) => {
+              const record = exam.record
+              
+              return (
+                <List.Item>
+                  <Card 
+                    className="exam-card"
+                    title={
+                      <div className="exam-card-title">
+                        <span>{exam.title}</span>
+                        {getStatusTag(record)}
+                      </div>
+                    }
                   >
-                    开始考试
-                  </Button>
-                )
-              ]}
-            >
-              <List.Item.Meta
-                title={
-                  <Space>
-                    <span>{exam.title}</span>
-                    {getStatusTag(exam.status)}
-                  </Space>
-                }
-                description={
-                  <Space split={<span>|</span>}>
-                    <span>
-                      <ClockCircleOutlined /> 时长：{exam.duration} 分钟
-                    </span>
-                    <span>
-                      <TrophyOutlined /> 总分：{exam.totalScore} 分
-                    </span>
-                    <span>
-                      题目数量：{exam.questionCount} 题
-                    </span>
-                    {exam.startTime && (
-                      <span>
-                        开始时间：{dayjs(exam.startTime).format('YYYY-MM-DD HH:mm')}
-                      </span>
-                    )}
-                  </Space>
-                }
-              />
-            </List.Item>
-          )}
-        />
-      </Card>
+                    <div className="exam-info">
+                      <div className="info-item">
+                        <ClockCircleOutlined className="info-icon" />
+                        <span>考试时长：{exam.duration}分钟</span>
+                      </div>
+                      <div className="info-item">
+                        <TrophyOutlined className="info-icon" />
+                        <span>总分：{exam.totalScore}分</span>
+                      </div>
+                      <div className="info-item">
+                        <span>及格分：{exam.passScore}分</span>
+                      </div>
+                    </div>
 
-      <Modal
-        title="考试详情"
-        open={detailModalVisible}
-        onCancel={() => setDetailModalVisible(false)}
-        footer={[
-          <Button key="close" onClick={() => setDetailModalVisible(false)}>
-            关闭
-          </Button>,
-          selectedExam?.status === 'available' && (
-            <Button
-              key="start"
-              type="primary"
-              icon={<PlayCircleOutlined />}
-              onClick={() => {
-                setDetailModalVisible(false)
-                handleStartExam(selectedExam)
-              }}
-            >
-              开始考试
-            </Button>
-          )
-        ]}
-        width={700}
-      >
-        {selectedExam && (
-          <Descriptions column={1} bordered>
-            <Descriptions.Item label="考试标题">
-              {selectedExam.title}
-            </Descriptions.Item>
-            <Descriptions.Item label="考试说明">
-              {selectedExam.description || '无'}
-            </Descriptions.Item>
-            <Descriptions.Item label="考试时长">
-              {selectedExam.duration} 分钟
-            </Descriptions.Item>
-            <Descriptions.Item label="总分">
-              {selectedExam.totalScore} 分
-            </Descriptions.Item>
-            <Descriptions.Item label="题目数量">
-              {selectedExam.questionCount} 题
-            </Descriptions.Item>
-            <Descriptions.Item label="及格分数">
-              {selectedExam.passScore} 分
-            </Descriptions.Item>
-            <Descriptions.Item label="开始时间">
-              {selectedExam.startTime ? dayjs(selectedExam.startTime).format('YYYY-MM-DD HH:mm') : '不限'}
-            </Descriptions.Item>
-            <Descriptions.Item label="结束时间">
-              {selectedExam.endTime ? dayjs(selectedExam.endTime).format('YYYY-MM-DD HH:mm') : '不限'}
-            </Descriptions.Item>
-            <Descriptions.Item label="状态">
-              {getStatusTag(selectedExam.status)}
-            </Descriptions.Item>
-          </Descriptions>
+                    <div className="exam-actions">
+                      {!record && (
+                        <Button 
+                          type="primary" 
+                          icon={<PlayCircleOutlined />}
+                          onClick={() => handleStartExam(exam)}
+                          block
+                        >
+                          开始考试
+                        </Button>
+                      )}
+                      {record && record.status === 'in_progress' && (
+                        <Button 
+                          type="primary" 
+                          icon={<PlayCircleOutlined />}
+                          onClick={() => navigate(`/student/take-exam/${record.id}`)}
+                          block
+                        >
+                          继续答题
+                        </Button>
+                      )}
+                    </div>
+                  </Card>
+                </List.Item>
+              )
+            }}
+          />
         )}
-      </Modal>
+      </Spin>
     </div>
   )
 }

@@ -5,6 +5,7 @@ import (
 	"log"
 
 	"g-design-server/config"
+
 	"gorm.io/driver/mysql"
 	"gorm.io/gorm"
 	"gorm.io/gorm/logger"
@@ -14,7 +15,7 @@ var DB *gorm.DB
 
 func InitDB() error {
 	dsn := config.GetDSN()
-	
+
 	db, err := gorm.Open(mysql.Open(dsn), &gorm.Config{
 		Logger: logger.Default.LogMode(logger.Info),
 	})
@@ -41,7 +42,14 @@ func AutoMigrate() error {
 		&Role{},
 		&Permission{},
 		&RolePermission{},
+		&Class{},
+		&TeacherClass{},
 		&User{},
+		&Question{},
+		&Exam{},
+		&ExamQuestion{},
+		&ExamRecord{},
+		&Answer{},
 	)
 }
 

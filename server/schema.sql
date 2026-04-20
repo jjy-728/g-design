@@ -96,6 +96,26 @@ SELECT 3, id FROM permissions WHERE name IN ('exam:take', 'result:view');
 
 -- 插入初始用户（密码都是123456的bcrypt加密）
 INSERT INTO users (username, password, name, email, role_id) VALUES
-('admin', '$2a$10$N9qo8uLOickgx2ZMRZoMyeIjZAgcfl7p92ldGxad68LJZdL17lhWy', '管理员', 'admin@example.com', 1),
-('teacher', '$2a$10$N9qo8uLOickgx2ZMRZoMyeIjZAgcfl7p92ldGxad68LJZdL17lhWy', '教师', 'teacher@example.com', 2),
-('student', '$2a$10$N9qo8uLOickgx2ZMRZoMyeIjZAgcfl7p92ldGxad68LJZdL17lhWy', '学生', 'student@example.com', 3);
+('admin', '$2a$10$v91EE6nEEiHPV.UNagi2/.J3QomtvzUHQECXFgQjmEj1mbm.zwhvm', '管理员', 'admin@example.com', 1),
+('teacher', '$2a$10$v91EE6nEEiHPV.UNagi2/.J3QomtvzUHQECXFgQjmEj1mbm.zwhvm', '教师', 'teacher@example.com', 2),
+('student', '$2a$10$v91EE6nEEiHPV.UNagi2/.J3QomtvzUHQECXFgQjmEj1mbm.zwhvm', '学生', 'student@example.com', 3);
+
+-- 题库表
+CREATE TABLE IF NOT EXISTS questions (
+    id BIGINT UNSIGNED AUTO_INCREMENT PRIMARY KEY COMMENT '题目ID',
+    content TEXT NOT NULL COMMENT '题目内容',
+    type VARCHAR(20) NOT NULL COMMENT '题型：single-单选, multiple-多选, fill-填空, essay-简答',
+    options JSON COMMENT '选项（JSON数组，仅选择题使用）',
+    answer TEXT NOT NULL COMMENT '正确答案',
+    explanation TEXT COMMENT '题目解析',
+    knowledge_point VARCHAR(200) COMMENT '知识点',
+    difficulty TINYINT UNSIGNED COMMENT '难度等级：1-5',
+    created_by BIGINT UNSIGNED COMMENT '创建人ID',
+    created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP COMMENT '创建时间',
+    updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP COMMENT '更新时间',
+    INDEX idx_type (type),
+    INDEX idx_knowledge_point (knowledge_point),
+    INDEX idx_difficulty (difficulty),
+    INDEX idx_created_by (created_by),
+    FOREIGN KEY (created_by) REFERENCES users(id) ON DELETE SET NULL
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci COMMENT='题库表';

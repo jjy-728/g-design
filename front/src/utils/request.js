@@ -61,7 +61,7 @@ const mockUsers = {
 
 const service = axios.create({
   baseURL: MOCK_MODE ? '' : '/api',
-  timeout: 15000
+  timeout: 60000 // 增加到 60 秒以适配 AI 生成任务
 })
 
 service.interceptors.request.use(

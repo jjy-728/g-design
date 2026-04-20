@@ -1,142 +1,231 @@
-import React, { useState, useEffect } from 'react'
+import React, { useState, useEffect, useCallback } from 'react'
 import { useParams, useNavigate } from 'react-router-dom'
-import {
-  Card,
-  Button,
-  Radio,
-  Checkbox,
-  Input,
-  Space,
-  message,
-  Modal,
-  Result,
-  Tag,
-  Badge,
-  Tooltip,
-  Divider
-} from 'antd'
-import {
-  ClockCircleOutlined,
-  StarOutlined,
-  StarFilled,
+import { Card, Button, Radio, Checkbox, Input, message, Modal, Progress, Tag, Spin } from 'antd'
+import { 
+  ClockCircleOutlined, 
+  FlagOutlined, 
   CheckCircleOutlined,
-  ArrowLeftOutlined,
-  SaveOutlined
+  LeftOutlined,
+  RightOutlined,
+  ExclamationCircleOutlined
 } from '@ant-design/icons'
 import request from '@/utils/request'
-import dayjs from 'dayjs'
+import './TakeExam.css'
+
+const { TextArea } = Input
 
 const TakeExam = () => {
-  const { id } = useParams()
+  const { recordId } = useParams()
   const navigate = useNavigate()
+  
   const [loading, setLoading] = useState(true)
-  const [submitting, setSubmitting] = useState(false)
-  const [exam, setExam] = useState(null)
+  const [record, setRecord] = useState(null)
   const [questions, setQuestions] = useState([])
+  const [currentIndex, setCurrentIndex] = useState(0)
   const [answers, setAnswers] = useState({})
   const [markedQuestions, setMarkedQuestions] = useState(new Set())
-  const [currentQuestionIndex, setCurrentQuestionIndex] = useState(0)
   const [timeLeft, setTimeLeft] = useState(0)
-  const [showResult, setShowResult] = useState(false)
-  const [result, setResult] = useState(null)
+  const [submitting, setSubmitting] = useState(false)
+  const [switchCount, setSwitchCount] = useState(0)
 
   useEffect(() => {
-    fetchExam()
-  }, [id])
+    fetchExamQuestions()
+    setupAntiCheat()
+    
+    return () => {
+      document.oncontextmenu = null
+      document.removeEventListener('visibilitychange', handleVisibilityChange)
+    }
+  }, [recordId])
 
   useEffect(() => {
-    if (timeLeft > 0 && !showResult) {
+    if (timeLeft > 0) {
       const timer = setInterval(() => {
-        setTimeLeft((prev) => {
+        setTimeLeft(prev => {
           if (prev <= 1) {
-            handleSubmit()
+            handleSubmit(true)
             return 0
           }
           return prev - 1
         })
       }, 1000)
-
+      
       return () => clearInterval(timer)
     }
-  }, [timeLeft, showResult])
+  }, [timeLeft])
 
   useEffect(() => {
-    if (Object.keys(answers).length > 0 && !showResult) {
-      const saveTimer = setTimeout(() => {
-        saveAnswers()
-      }, 5000)
+    const autoSaveTimer = setInterval(() => {
+      autoSaveAnswers()
+    }, 30000)
+    
+    return () => clearInterval(autoSaveTimer)
+  }, [answers])
 
-      return () => clearTimeout(saveTimer)
-    }
-  }, [answers, showResult])
-
-  const fetchExam = async () => {
+  const fetchExamQuestions = async () => {
     try {
       setLoading(true)
-      const response = await request.get(`/exams/${id}`)
-      setExam(response.exam)
-      setQuestions(response.questions)
-      setTimeLeft(response.exam.duration * 60)
+      const response = await request.get(`/exam-records/questions/${recordId}`)
       
-      if (response.savedAnswers) {
-        setAnswers(response.savedAnswers)
-      }
+      setRecord(response.record)
+      setQuestions(response.questions || [])
       
-      if (response.markedQuestions) {
-        setMarkedQuestions(new Set(response.markedQuestions))
-      }
+      const duration = response.record?.exam?.duration || 60
+      setTimeLeft(duration * 60)
+      
+      const answerMap = {}
+      const markedSet = new Set()
+      
+      response.questions.forEach(q => {
+        if (q.studentAnswer) {
+          answerMap[q.questionId] = q.studentAnswer
+        }
+        if (q.isMarked) {
+          markedSet.add(q.questionId)
+        }
+      })
+      
+      setAnswers(answerMap)
+      setMarkedQuestions(markedSet)
     } catch (error) {
-      console.error('Fetch exam error:', error)
-      message.error('加载考试失败')
-      navigate('/student/exams')
+      console.error('Fetch questions error:', error)
+      message.error('获取题目失败')
     } finally {
       setLoading(false)
     }
   }
 
-  const saveAnswers = async () => {
-    try {
-      await request.post(`/exams/${id}/save`, {
-        answers,
-        markedQuestions: Array.from(markedQuestions)
-      })
-    } catch (error) {
-      console.error('Save answers error:', error)
+  const setupAntiCheat = () => {
+    document.oncontextmenu = () => {
+      message.warning('考试期间禁止右键操作')
+      return false
     }
-  }
 
-  const handleAnswerChange = (questionId, value) => {
-    setAnswers((prev) => ({
-      ...prev,
-      [questionId]: value
-    }))
-  }
+    document.addEventListener('visibilitychange', handleVisibilityChange)
 
-  const handleMarkQuestion = (questionId) => {
-    setMarkedQuestions((prev) => {
-      const newSet = new Set(prev)
-      if (newSet.has(questionId)) {
-        newSet.delete(questionId)
-      } else {
-        newSet.add(questionId)
-      }
-      return newSet
+    window.addEventListener('beforeunload', (e) => {
+      e.preventDefault()
+      e.returnValue = ''
     })
   }
 
-  const handleSubmit = async () => {
+  const handleVisibilityChange = () => {
+    if (document.hidden) {
+      setSwitchCount(prev => prev + 1)
+      message.warning(`请勿切换页面！已记录第${switchCount + 1}次切屏行为`)
+    }
+  }
+
+  const autoSaveAnswers = async () => {
+    const currentQuestion = questions[currentIndex]
+    if (!currentQuestion) return
+    
+    const answer = answers[currentQuestion.questionId]
+    if (answer !== undefined) {
+      try {
+        await request.post('/exam-records/answer', {
+          recordId: parseInt(recordId),
+          questionId: currentQuestion.questionId,
+          studentAnswer: answer
+        })
+      } catch (error) {
+        console.error('Auto save error:', error)
+      }
+    }
+  }
+
+  const handleAnswerChange = (value) => {
+    const currentQuestion = questions[currentIndex]
+    setAnswers(prev => ({
+      ...prev,
+      [currentQuestion.questionId]: value
+    }))
+  }
+
+  const handleToggleMark = async () => {
+    const currentQuestion = questions[currentIndex]
+    const newMarked = new Set(markedQuestions)
+    
+    if (newMarked.has(currentQuestion.questionId)) {
+      newMarked.delete(currentQuestion.questionId)
+    } else {
+      newMarked.add(currentQuestion.questionId)
+    }
+    
+    setMarkedQuestions(newMarked)
+    
+    try {
+      await request.post('/exam-records/toggle-mark', {
+        recordId: parseInt(recordId),
+        questionId: currentQuestion.questionId
+      })
+      message.success(newMarked.has(currentQuestion.questionId) ? '已标记' : '已取消标记')
+    } catch (error) {
+      console.error('Toggle mark error:', error)
+    }
+  }
+
+  const handlePrevQuestion = async () => {
+    await saveCurrentAnswer()
+    setCurrentIndex(prev => Math.max(0, prev - 1))
+  }
+
+  const handleNextQuestion = async () => {
+    await saveCurrentAnswer()
+    setCurrentIndex(prev => Math.min(questions.length - 1, prev + 1))
+  }
+
+  const saveCurrentAnswer = async () => {
+    const currentQuestion = questions[currentIndex]
+    if (!currentQuestion) return
+    
+    const answer = answers[currentQuestion.questionId]
+    if (answer === undefined) return
+    
+    try {
+      await request.post('/exam-records/answer', {
+        recordId: parseInt(recordId),
+        questionId: currentQuestion.questionId,
+        studentAnswer: answer
+      })
+    } catch (error) {
+      console.error('Save answer error:', error)
+    }
+  }
+
+  const handleSubmit = async (isAuto = false) => {
+    if (!isAuto) {
+      const unanswered = questions.filter(q => !answers[q.questionId])
+      if (unanswered.length > 0) {
+        Modal.confirm({
+          title: '提交确认',
+          icon: <ExclamationCircleOutlined />,
+          content: `您还有 ${unanswered.length} 道题目未作答，确定要提交吗？`,
+          okText: '确定提交',
+          cancelText: '继续答题',
+          onOk: () => submitExam()
+        })
+        return
+      }
+    }
+    
+    await submitExam()
+  }
+
+  const submitExam = async () => {
     try {
       setSubmitting(true)
-      const response = await request.post(`/exams/${id}/submit`, {
-        answers
+      await saveCurrentAnswer()
+      
+      await request.post('/exam-records/submit', {
+        recordId: parseInt(recordId)
       })
       
-      setResult(response)
-      setShowResult(true)
-      message.success('交卷成功')
+      message.success('试卷提交成功！')
+      navigate(`/student/exam-result/${recordId}`)
     } catch (error) {
       console.error('Submit exam error:', error)
-      message.error('交卷失败')
+      message.error('提交失败，请重试')
     } finally {
       setSubmitting(false)
     }
@@ -150,275 +239,210 @@ const TakeExam = () => {
     if (hours > 0) {
       return `${hours}:${String(minutes).padStart(2, '0')}:${String(secs).padStart(2, '0')}`
     }
-    return `${String(minutes).padStart(2, '0')}:${String(secs).padStart(2, '0')}`
+    return `${minutes}:${String(secs).padStart(2, '0')}`
   }
 
-  const renderQuestion = (question, index) => {
-    const isMarked = markedQuestions.has(question.id)
-    const userAnswer = answers[question.id]
+  const renderQuestion = () => {
+    const question = questions[currentIndex]
+    if (!question) return null
+
+    const questionNumber = currentIndex + 1
+    const answer = answers[question.questionId]
 
     return (
-      <Card
-        key={question.id}
-        style={{ marginBottom: 24 }}
-        title={
-          <Space>
-            <span>第 {index + 1} 题</span>
-            <Tag color="blue">{question.type === 'single' ? '单选题' : question.type === 'multiple' ? '多选题' : question.type === 'fill' ? '填空题' : '简答题'}</Tag>
-            <Tag color="orange">{question.difficulty}级</Tag>
-            <Tag color="purple">{question.score}分</Tag>
-            {isMarked && <Tag color="red">已标记</Tag>}
-          </Space>
-        }
-        extra={
-          <Tooltip title={isMarked ? '取消标记' : '标记为疑难题目'}>
-            <Button
-              type="text"
-              icon={isMarked ? <StarFilled style={{ color: '#faad14' }} /> : <StarOutlined />}
-              onClick={() => handleMarkQuestion(question.id)}
-            >
-              {isMarked ? '已标记' : '标记'}
-            </Button>
-          </Tooltip>
-        }
-      >
-        <div style={{ marginBottom: 16, fontSize: 16 }}>
+      <div className="question-content">
+        <div className="question-header">
+          <span className="question-number">第 {questionNumber} 题</span>
+          <Tag color="blue">{getQuestionTypeText(question.type)}</Tag>
+          <Tag color="orange">{question.score} 分</Tag>
+          {markedQuestions.has(question.questionId) && (
+            <Tag color="red" icon={<FlagOutlined />}>已标记</Tag>
+          )}
+        </div>
+        
+        <div className="question-text">
           {question.content}
         </div>
 
-        {question.type === 'single' && (
-          <Radio.Group
-            value={userAnswer}
-            onChange={(e) => handleAnswerChange(question.id, e.target.value)}
-            style={{ width: '100%' }}
-          >
-            <Space direction="vertical" style={{ width: '100%' }}>
-              {question.options?.map((option, idx) => (
-                <Radio key={idx} value={String.fromCharCode(65 + idx)}>
-                  {String.fromCharCode(65 + idx)}. {option}
-                </Radio>
-              ))}
-            </Space>
-          </Radio.Group>
-        )}
-
-        {question.type === 'multiple' && (
-          <Checkbox.Group
-            value={userAnswer || []}
-            onChange={(value) => handleAnswerChange(question.id, value)}
-            style={{ width: '100%' }}
-          >
-            <Space direction="vertical" style={{ width: '100%' }}>
-              {question.options?.map((option, idx) => (
-                <Checkbox key={idx} value={String.fromCharCode(65 + idx)}>
-                  {String.fromCharCode(65 + idx)}. {option}
-                </Checkbox>
-              ))}
-            </Space>
-          </Checkbox.Group>
-        )}
-
-        {question.type === 'fill' && (
-          <Input
-            value={userAnswer || ''}
-            onChange={(e) => handleAnswerChange(question.id, e.target.value)}
-            placeholder="请输入答案"
-            size="large"
-          />
-        )}
-
-        {question.type === 'essay' && (
-          <Input.TextArea
-            value={userAnswer || ''}
-            onChange={(e) => handleAnswerChange(question.id, e.target.value)}
-            placeholder="请输入答案"
-            rows={6}
-          />
-        )}
-      </Card>
+        <div className="question-options">
+          {question.type === 'single' && (
+            <Radio.Group 
+              value={answer} 
+              onChange={(e) => handleAnswerChange(e.target.value)}
+            >
+              {renderOptions(question.options)}
+            </Radio.Group>
+          )}
+          
+          {question.type === 'multiple' && (
+            <Checkbox.Group 
+              value={answer ? answer.split(',') : []}
+              onChange={(values) => handleAnswerChange(values.sort().join(','))}
+            >
+              {renderOptions(question.options)}
+            </Checkbox.Group>
+          )}
+          
+          {question.type === 'fill' && (
+            <Input
+              value={answer}
+              onChange={(e) => handleAnswerChange(e.target.value)}
+              placeholder="请输入答案"
+              size="large"
+            />
+          )}
+          
+          {question.type === 'essay' && (
+            <TextArea
+              value={answer}
+              onChange={(e) => handleAnswerChange(e.target.value)}
+              placeholder="请输入答案"
+              rows={6}
+              maxLength={1000}
+              showCount
+            />
+          )}
+        </div>
+      </div>
     )
+  }
+
+  const renderOptions = (options) => {
+    if (!options) return null
+    
+    const optionList = typeof options === 'string' ? JSON.parse(options) : options
+    const labels = ['A', 'B', 'C', 'D', 'E', 'F', 'G', 'H']
+    
+    return optionList.map((option, index) => (
+      <div key={index} className="option-item">
+        {questions[currentIndex]?.type === 'single' ? (
+          <Radio value={labels[index]}>
+            <span className="option-label">{labels[index]}.</span>
+            <span className="option-text">{option}</span>
+          </Radio>
+        ) : (
+          <Checkbox value={labels[index]}>
+            <span className="option-label">{labels[index]}.</span>
+            <span className="option-text">{option}</span>
+          </Checkbox>
+        )}
+      </div>
+    ))
+  }
+
+  const getQuestionTypeText = (type) => {
+    const typeMap = {
+      'single': '单选题',
+      'multiple': '多选题',
+      'fill': '填空题',
+      'essay': '简答题'
+    }
+    return typeMap[type] || type
   }
 
   const renderQuestionNav = () => {
     return (
-      <Card title="答题卡" style={{ position: 'sticky', top: 16 }}>
-        <div style={{ display: 'grid', gridTemplateColumns: 'repeat(5, 1fr)', gap: 8 }}>
-          {questions.map((question, index) => {
-            const isAnswered = answers[question.id]
-            const isMarked = markedQuestions.has(question.id)
-            const isCurrent = index === currentQuestionIndex
-
-            return (
-              <Badge
-                key={question.id}
-                dot={isMarked}
-                offset={[-5, 5]}
-              >
-                <Button
-                  size="small"
-                  type={isCurrent ? 'primary' : 'default'}
-                  style={{
-                    width: '100%',
-                    backgroundColor: isAnswered && !isCurrent ? '#52c41a' : undefined,
-                    borderColor: isAnswered && !isCurrent ? '#52c41a' : undefined
-                  }}
-                  onClick={() => setCurrentQuestionIndex(index)}
-                >
-                  {index + 1}
-                </Button>
-              </Badge>
-            )
-          })}
+      <div className="question-nav">
+        <div className="nav-title">答题卡</div>
+        <div className="nav-grid">
+          {questions.map((q, index) => (
+            <Button
+              key={index}
+              size="small"
+              type={currentIndex === index ? 'primary' : 'default'}
+              className={`nav-button ${answers[q.questionId] ? 'answered' : ''} ${markedQuestions.has(q.questionId) ? 'marked' : ''}`}
+              onClick={() => {
+                saveCurrentAnswer()
+                setCurrentIndex(index)
+              }}
+            >
+              {index + 1}
+            </Button>
+          ))}
         </div>
-        
-        <Divider />
-        
-        <div style={{ display: 'flex', gap: 16, justifyContent: 'center' }}>
-          <div>
-            <span style={{ display: 'inline-block', width: 12, height: 12, backgroundColor: '#52c41a', marginRight: 4 }} />
-            已答题
-          </div>
-          <div>
-            <span style={{ display: 'inline-block', width: 12, height: 12, backgroundColor: '#d9d9d9', marginRight: 4 }} />
-            未答题
-          </div>
-          <div>
-            <Badge dot offset={[0, 0]}>
-              <span>已标记</span>
-            </Badge>
-          </div>
+        <div className="nav-legend">
+          <span><span className="legend-dot answered"></span> 已答</span>
+          <span><span className="legend-dot marked"></span> 标记</span>
         </div>
-      </Card>
-    )
-  }
-
-  const renderResult = () => {
-    return (
-      <Result
-        status="success"
-        title="考试已完成"
-        subTitle={`您的得分：${result?.score || 0} / ${exam?.totalScore || 0}`}
-        extra={[
-          <Button key="back" type="primary" onClick={() => navigate('/student/history')}>
-            查看考试记录
-          </Button>
-        ]}
-      >
-        <Card title="答题详情" style={{ marginTop: 24 }}>
-          {questions.map((question, index) => {
-            const userAnswer = answers[question.id]
-            const isCorrect = result?.details?.[question.id]?.isCorrect
-            const score = result?.details?.[question.id]?.score || 0
-
-            return (
-              <div key={question.id} style={{ marginBottom: 24, paddingBottom: 24, borderBottom: '1px solid #f0f0f0' }}>
-                <div style={{ marginBottom: 8 }}>
-                  <strong>第 {index + 1} 题</strong>
-                  <Tag color="purple" style={{ marginLeft: 8 }}>{question.score}分</Tag>
-                  {isCorrect !== undefined && (
-                    <Tag color={isCorrect ? 'green' : 'red'} style={{ marginLeft: 8 }}>
-                      {isCorrect ? '正确' : '错误'}
-                    </Tag>
-                  )}
-                  <span style={{ marginLeft: 8, color: '#8c8c8c' }}>得分：{score}</span>
-                </div>
-                <div style={{ marginBottom: 8 }}>{question.content}</div>
-                <div style={{ marginBottom: 8 }}>
-                  <span style={{ color: '#8c8c8c' }}>您的答案：</span>
-                  <span style={{ color: isCorrect ? '#52c41a' : '#ff4d4f' }}>
-                    {Array.isArray(userAnswer) ? userAnswer.join(', ') : userAnswer || '未作答'}
-                  </span>
-                </div>
-                {isCorrect !== undefined && (
-                  <div>
-                    <span style={{ color: '#8c8c8c' }}>正确答案：</span>
-                    <span style={{ color: '#52c41a' }}>
-                      {Array.isArray(question.answer) ? question.answer.join(', ') : question.answer}
-                    </span>
-                  </div>
-                )}
-              </div>
-            )
-          })}
-        </Card>
-      </Result>
+      </div>
     )
   }
 
   if (loading) {
-    return <div style={{ textAlign: 'center', padding: '100px 0' }}>加载中...</div>
+    return (
+      <div className="loading-container">
+        <Spin size="large" tip="加载题目中..." />
+      </div>
+    )
   }
 
-  if (showResult) {
-    return renderResult()
-  }
+  const progress = (Object.keys(answers).length / questions.length) * 100
 
   return (
-    <div style={{ padding: 24 }}>
-      <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 24 }}>
-        <Space>
-          <Button icon={<ArrowLeftOutlined />} onClick={() => navigate('/student/exams')}>
-            返回
-          </Button>
-          <h1 style={{ margin: 0 }}>{exam?.title}</h1>
-        </Space>
-        <Space>
-          <Badge count={markedQuestions.size} overflowCount={99}>
-            <Tag icon={<StarOutlined />} color="orange">
-              已标记
-            </Tag>
-          </Badge>
-          <Tag icon={<ClockCircleOutlined />} color="blue">
+    <div className="take-exam-container">
+      <div className="exam-header">
+        <div className="exam-title">{record?.exam?.title}</div>
+        <div className="exam-timer">
+          <ClockCircleOutlined className="timer-icon" />
+          <span className={`timer-text ${timeLeft < 600 ? 'warning' : ''}`}>
             剩余时间：{formatTime(timeLeft)}
-          </Tag>
-          <Tag icon={<SaveOutlined />} color="green">
-            自动保存
-          </Tag>
-        </Space>
+          </span>
+        </div>
+        <div className="exam-progress">
+          <Progress 
+            percent={progress} 
+            size="small"
+            format={() => `${Object.keys(answers).length}/${questions.length}`}
+          />
+        </div>
       </div>
 
-      <div style={{ display: 'flex', gap: 24 }}>
-        <div style={{ flex: 1 }}>
-          {questions.map((question, index) => {
-            if (index === currentQuestionIndex) {
-              return renderQuestion(question, index)
-            }
-            return null
-          })}
-
-          <div style={{ display: 'flex', justifyContent: 'space-between', marginTop: 24 }}>
-            <Button
-              disabled={currentQuestionIndex === 0}
-              onClick={() => setCurrentQuestionIndex(currentQuestionIndex - 1)}
-            >
-              上一题
-            </Button>
-            <Button
-              type="primary"
-              danger
-              onClick={() => {
-                Modal.confirm({
-                  title: '确认交卷',
-                  content: '交卷后将无法继续答题，确定要交卷吗？',
-                  okText: '确定交卷',
-                  cancelText: '取消',
-                  onOk: handleSubmit
-                })
-              }}
-              loading={submitting}
-            >
-              提交试卷
-            </Button>
-            <Button
-              disabled={currentQuestionIndex === questions.length - 1}
-              onClick={() => setCurrentQuestionIndex(currentQuestionIndex + 1)}
-            >
-              下一题
-            </Button>
-          </div>
+      <div className="exam-body">
+        <div className="question-area">
+          <Card className="question-card">
+            {renderQuestion()}
+            
+            <div className="question-actions">
+              <Button 
+                icon={<FlagOutlined />}
+                onClick={handleToggleMark}
+                type={markedQuestions.has(questions[currentIndex]?.questionId) ? 'primary' : 'default'}
+              >
+                {markedQuestions.has(questions[currentIndex]?.questionId) ? '取消标记' : '标记题目'}
+              </Button>
+              
+              <div className="nav-buttons">
+                <Button 
+                  icon={<LeftOutlined />}
+                  onClick={handlePrevQuestion}
+                  disabled={currentIndex === 0}
+                >
+                  上一题
+                </Button>
+                <Button 
+                  type="primary"
+                  icon={<RightOutlined />}
+                  onClick={handleNextQuestion}
+                  disabled={currentIndex === questions.length - 1}
+                >
+                  下一题
+                </Button>
+              </div>
+              
+              <Button 
+                type="primary"
+                danger
+                icon={<CheckCircleOutlined />}
+                onClick={() => handleSubmit(false)}
+                loading={submitting}
+              >
+                提交试卷
+              </Button>
+            </div>
+          </Card>
         </div>
-
-        <div style={{ width: 280 }}>
+        
+        <div className="sidebar">
           {renderQuestionNav()}
         </div>
       </div>

@@ -1,0 +1,203 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>在线考试系统 - ER图</title>
+    <style>
+        body {
+            margin: 0;
+            padding: 40px;
+            background: #fff;
+            font-family: "Microsoft YaHei", "SimHei", sans-serif;
+        }
+        h1 {
+            text-align: center;
+            color: #333;
+            margin-bottom: 40px;
+            font-size: 28px;
+        }
+        svg {
+            display: block;
+            margin: 0 auto;
+        }
+        .entity {
+            fill: #fff;
+            stroke: #333;
+            stroke-width: 2;
+        }
+        .relationship {
+            fill: #fff;
+            stroke: #333;
+            stroke-width: 2;
+        }
+        .entity text, .relationship text {
+            font-family: "Microsoft YaHei", "SimHei", sans-serif;
+            font-size: 15px;
+            fill: #333;
+            text-anchor: middle;
+            dominant-baseline: middle;
+        }
+        .line {
+            stroke: #333;
+            stroke-width: 1.5;
+            fill: none;
+        }
+        .cardinality {
+            font-family: "Microsoft YaHei", "SimHei", sans-serif;
+            font-size: 14px;
+            fill: #333;
+            text-anchor: middle;
+        }
+    </style>
+</head>
+<body>
+    <h1>在线考试系统 ER图</h1>
+    <svg width="1200" height="850" viewBox="0 0 1200 850" xmlns="http://www.w3.org/2000/svg">
+        <!-- ==================== 实体定义 ==================== -->
+        <!-- 用户 -->
+        <rect class="entity" x="500" y="350" width="120" height="60"/>
+        <text x="560" y="380">用户</text>
+        
+        <!-- 角色 -->
+        <rect class="entity" x="500" y="50" width="120" height="60"/>
+        <text x="560" y="80">角色</text>
+        
+        <!-- 权限 -->
+        <rect class="entity" x="250" y="50" width="120" height="60"/>
+        <text x="310" y="80">权限</text>
+        
+        <!-- 班级 -->
+        <rect class="entity" x="850" y="350" width="120" height="60"/>
+        <text x="910" y="380">班级</text>
+        
+        <!-- 题目 -->
+        <rect class="entity" x="100" y="650" width="120" height="60"/>
+        <text x="160" y="680">题目</text>
+        
+        <!-- 考试 -->
+        <rect class="entity" x="500" y="650" width="120" height="60"/>
+        <text x="560" y="680">考试</text>
+        
+        <!-- 考试记录 -->
+        <rect class="entity" x="900" y="650" width="120" height="60"/>
+        <text x="960" y="680">考试记录</text>
+        
+        <!-- 答案 -->
+        <rect class="entity" x="700" y="780" width="120" height="60"/>
+        <text x="760" y="810">答案</text>
+
+        <!-- ==================== 关系定义 ==================== -->
+        <!-- 属于 (用户-角色) -->
+        <polygon class="relationship" points="560,160 580,180 560,200 540,180"/>
+        <text x="560" y="180">属于</text>
+        
+        <!-- 拥有 (角色-权限) -->
+        <polygon class="relationship" points="430,105 450,125 430,145 410,125"/>
+        <text x="430" y="125">拥有</text>
+        
+        <!-- 属于 (用户-班级) -->
+        <polygon class="relationship" points="725,380 745,400 725,420 705,400"/>
+        <text x="725" y="400">属于</text>
+        
+        <!-- 管理 (用户-班级，教师管理班级) -->
+        <polygon class="relationship" points="725,250 745,270 725,290 705,270"/>
+        <text x="725" y="270">管理</text>
+        
+        <!-- 包含 (考试-题目) -->
+        <polygon class="relationship" points="325,680 345,700 325,720 305,700"/>
+        <text x="325" y="700">包含</text>
+        
+        <!-- 属于 (考试记录-考试) -->
+        <polygon class="relationship" points="725,680 745,700 725,720 705,700"/>
+        <text x="725" y="700">属于</text>
+        
+        <!-- 参加 (考试记录-用户) -->
+        <polygon class="relationship" points="750,500 770,520 750,540 730,520"/>
+        <text x="750" y="520">参加</text>
+        
+        <!-- 关联 (考试-班级) -->
+        <polygon class="relationship" points="725,550 745,570 725,590 705,570"/>
+        <text x="725" y="570">关联</text>
+        
+        <!-- 包含 (答案-考试记录) -->
+        <polygon class="relationship" points="850,725 870,745 850,765 830,745"/>
+        <text x="850" y="745">包含</text>
+        
+        <!-- 对应 (答案-题目) -->
+        <polygon class="relationship" points="425,750 445,770 425,790 405,770"/>
+        <text x="425" y="770">对应</text>
+
+        <!-- ==================== 连线 ==================== -->
+        <!-- 角色 - 属于 - 用户 -->
+        <line class="line" x1="560" y1="110" x2="560" y2="160"/>
+        <text class="cardinality" x="575" y="140">1</text>
+        <line class="line" x1="560" y1="200" x2="560" y2="350"/>
+        <text class="cardinality" x="575" y="280">n</text>
+
+        <!-- 角色 - 拥有 - 权限 -->
+        <line class="line" x1="500" y1="80" x2="450" y2="125"/>
+        <text class="cardinality" x="480" y="95">n</text>
+        <line class="line" x1="370" y1="80" x2="410" y2="125"/>
+        <text class="cardinality" x="380" y="95">n</text>
+
+        <!-- 用户 - 属于 - 班级 -->
+        <line class="line" x1="620" y1="380" x2="705" y2="400"/>
+        <text class="cardinality" x="650" y="380">n</text>
+        <line class="line" x1="850" y1="380" x2="745" y2="400"/>
+        <text class="cardinality" x="820" y="380">1</text>
+
+        <!-- 用户 - 管理 - 班级 (教师管理班级) -->
+        <line class="line" x1="620" y1="350" x2="705" y2="270"/>
+        <text class="cardinality" x="650" y="320">n</text>
+        <line class="line" x1="850" y1="350" x2="745" y2="270"/>
+        <text class="cardinality" x="820" y="320">n</text>
+
+        <!-- 考试 - 包含 - 题目 -->
+        <line class="line" x1="500" y1="680" x2="345" y2="700"/>
+        <text class="cardinality" x="460" y="680">n</text>
+        <line class="line" x1="220" y1="680" x2="305" y2="700"/>
+        <text class="cardinality" x="240" y="680">n</text>
+
+        <!-- 考试 - 属于 - 考试记录 -->
+        <line class="line" x1="620" y1="680" x2="705" y2="700"/>
+        <text class="cardinality" x="650" y="680">n</text>
+        <line class="line" x1="900" y1="680" x2="745" y2="700"/>
+        <text class="cardinality" x="870" y="680">1</text>
+
+        <!-- 用户 - 参加 - 考试记录 -->
+        <line class="line" x1="620" y1="380" x2="730" y2="520"/>
+        <text class="cardinality" x="660" y="440">n</text>
+        <line class="line" x1="900" y1="650" x2="770" y2="520"/>
+        <text class="cardinality" x="870" y="600">1</text>
+
+        <!-- 考试 - 关联 - 班级 -->
+        <line class="line" x1="560" y1="650" x2="705" y2="570"/>
+        <text class="cardinality" x="600" y="620">n</text>
+        <line class="line" x1="910" y1="410" x2="745" y2="570"/>
+        <text class="cardinality" x="860" y="520">1</text>
+
+        <!-- 考试记录 - 包含 - 答案 -->
+        <line class="line" x1="900" y1="710" x2="870" y2="745"/>
+        <text class="cardinality" x="890" y="720">1</text>
+        <line class="line" x1="820" y1="780" x2="830" y2="745"/>
+        <text class="cardinality" x="835" y="770">n</text>
+
+        <!-- 题目 - 对应 - 答案 -->
+        <line class="line" x1="220" y1="710" x2="405" y2="770"/>
+        <text class="cardinality" x="280" y="730">n</text>
+        <line class="line" x1="700" y1="810" x2="445" y2="770"/>
+        <text class="cardinality" x="620" y="800">1</text>
+
+        <!-- ==================== 图例 ==================== -->
+        <g transform="translate(1000, 50)">
+            <rect x="0" y="0" width="180" height="100" fill="#f9f9f9" stroke="#ccc" stroke-width="1"/>
+            <text x="90" y="22" font-size="14" font-weight="bold" fill="#333" text-anchor="middle">图例</text>
+            <rect x="15" y="38" width="25" height="18" fill="#fff" stroke="#333" stroke-width="1.5"/>
+            <text x="100" y="50" font-size="12" fill="#666" text-anchor="start">实体</text>
+            <polygon points="15,72 25,82 15,92 5,82" fill="#fff" stroke="#333" stroke-width="1.5"/>
+            <text x="100" y="84" font-size="12" fill="#666" text-anchor="start">关系</text>
+        </g>
+    </svg>
+</body>
+</html>

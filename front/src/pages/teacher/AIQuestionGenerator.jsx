@@ -1,4 +1,4 @@
-import React, { useState } from 'react'
+import React, { useState, useEffect, useRef } from 'react'
 import { 
   Card, 
   Form, 
@@ -10,7 +10,8 @@ import {
   message, 
   Spin,
   Divider,
-  Modal
+  Modal,
+  Tag
 } from 'antd'
 import { 
   RobotOutlined, 
@@ -24,13 +25,82 @@ import request from '@/utils/request'
 const { TextArea } = Input
 const { Option } = Select
 
+const CACHE_KEY = 'ai_generated_questions'
+const FORM_CACHE_KEY = 'ai_generate_form'
+const LOADING_KEY = 'ai_generating_loading'
+
 const AIQuestionGenerator = () => {
   const [form] = Form.useForm()
-  const [loading, setLoading] = useState(false)
-  const [generatedQuestions, setGeneratedQuestions] = useState([])
+  const [loading, setLoading] = useState(() => {
+    const cached = sessionStorage.getItem(LOADING_KEY)
+    return cached === 'true'
+  })
+  const [generatedQuestions, setGeneratedQuestions] = useState(() => {
+    const cached = sessionStorage.getItem(CACHE_KEY)
+    return cached ? JSON.parse(cached) : []
+  })
   const [editingQuestion, setEditingQuestion] = useState(null)
   const [editModalVisible, setEditModalVisible] = useState(false)
   const [editForm] = Form.useForm()
+  
+  const loadingRef = useRef(loading)
+  const abortControllerRef = useRef(null)
+
+  useEffect(() => {
+    loadingRef.current = loading
+    if (loading) {
+      sessionStorage.setItem(LOADING_KEY, 'true')
+    } else {
+      sessionStorage.removeItem(LOADING_KEY)
+    }
+  }, [loading])
+
+  useEffect(() => {
+    const formCache = sessionStorage.getItem(FORM_CACHE_KEY)
+    if (formCache) {
+      form.setFieldsValue(JSON.parse(formCache))
+    }
+    
+    return () => {
+      if (abortControllerRef.current) {
+        abortControllerRef.current.abort()
+      }
+    }
+  }, [])
+
+  useEffect(() => {
+    let pollInterval = null
+    
+    if (loading) {
+      pollInterval = setInterval(() => {
+        const cachedQuestions = sessionStorage.getItem(CACHE_KEY)
+        const isLoading = sessionStorage.getItem(LOADING_KEY)
+        
+        if (cachedQuestions && isLoading !== 'true') {
+          const questions = JSON.parse(cachedQuestions)
+          if (questions.length > 0) {
+            setGeneratedQuestions(questions)
+            setLoading(false)
+            message.success(`成功生成 ${questions.length} 道题目`)
+          }
+        }
+      }, 500)
+    }
+    
+    return () => {
+      if (pollInterval) {
+        clearInterval(pollInterval)
+      }
+    }
+  }, [loading])
+
+  useEffect(() => {
+    if (generatedQuestions.length > 0) {
+      sessionStorage.setItem(CACHE_KEY, JSON.stringify(generatedQuestions))
+    } else {
+      sessionStorage.removeItem(CACHE_KEY)
+    }
+  }, [generatedQuestions])
 
   const questionTypes = [
     { value: 'single', label: '单选题' },
@@ -42,6 +112,7 @@ const AIQuestionGenerator = () => {
   const handleGenerate = async (values) => {
     try {
       setLoading(true)
+      sessionStorage.setItem(FORM_CACHE_KEY, JSON.stringify(values))
       
       const response = await request.post('/ai/generate-questions', {
         knowledgePoint: values.knowledgePoint,
@@ -50,18 +121,49 @@ const AIQuestionGenerator = () => {
         count: values.count
       })
 
-      setGeneratedQuestions(response.questions || [])
-      message.success(`成功生成 ${response.questions?.length || 0} 道题目`)
+      const cleanedQuestions = (response.questions || []).map(q => ({
+        ...q,
+        options: Array.isArray(q.options) 
+          ? q.options.map(o => o.replace(/^[A-Z][.．\s]+/, '').trim())
+          : q.options,
+        answer: (q.type === 'single' || q.type === 'multiple') && typeof q.answer === 'string'
+          ? q.answer.split(/[.．\s]+/).shift().toUpperCase()
+          : q.answer
+      }))
+
+      sessionStorage.setItem(CACHE_KEY, JSON.stringify(cleanedQuestions))
+      sessionStorage.removeItem(LOADING_KEY)
+      
+      setGeneratedQuestions(cleanedQuestions)
+      setLoading(false)
+      message.success(`成功生成 ${cleanedQuestions.length} 道题目`)
     } catch (error) {
       console.error('Generate questions error:', error)
-    } finally {
+      sessionStorage.removeItem(LOADING_KEY)
       setLoading(false)
     }
   }
 
   const handleEdit = (question, index) => {
     setEditingQuestion({ ...question, index })
-    editForm.setFieldsValue(question)
+    // 回显时给选项加上 A. B. C. 前缀
+    let optionsText = ''
+    if (Array.isArray(question.options)) {
+      optionsText = question.options
+        .filter(o => o.trim())
+        .map((option, idx) => {
+          const prefix = String.fromCharCode(65 + idx) + '. '
+          if (option.trim().startsWith(prefix)) {
+            return option.trim()
+          }
+          return prefix + option.trim()
+        })
+        .join('\n')
+    }
+    editForm.setFieldsValue({
+      ...question,
+      options: optionsText
+    })
     setEditModalVisible(true)
   }
 
@@ -69,7 +171,21 @@ const AIQuestionGenerator = () => {
     try {
       const values = await editForm.validateFields()
       const updatedQuestions = [...generatedQuestions]
-      updatedQuestions[editingQuestion.index] = values
+      
+      // 处理选项，将换行字符串转回数组
+      const processedOptions = typeof values.options === 'string' 
+        ? values.options.split('\n').filter(o => o.trim()).map(o => {
+            // 清理编辑时手动输入的 A. B. 前缀
+            return o.replace(/^[A-Z][.．\s]+/, '').trim()
+          })
+        : values.options
+
+      updatedQuestions[editingQuestion.index] = {
+        ...editingQuestion,
+        ...values,
+        options: processedOptions
+      }
+      
       setGeneratedQuestions(updatedQuestions)
       setEditModalVisible(false)
       message.success('题目编辑成功')
@@ -92,6 +208,8 @@ const AIQuestionGenerator = () => {
       await request.post('/questions/batch', { questions: generatedQuestions })
       message.success('所有题目已保存到题库')
       setGeneratedQuestions([])
+      sessionStorage.removeItem(CACHE_KEY)
+      sessionStorage.removeItem(FORM_CACHE_KEY)
       form.resetFields()
     } catch (error) {
       console.error('Save all questions error:', error)
@@ -135,36 +253,74 @@ const AIQuestionGenerator = () => {
         <div style={{ marginBottom: 12 }}>
           <strong>难度：</strong> {question.difficulty} 级
         </div>
-        <div style={{ marginBottom: 12 }}>
-          <strong>题目内容：</strong>
-          <div style={{ marginTop: 8, padding: 12, background: '#f5f5f5', borderRadius: 4 }}>
+        <div style={{ marginBottom: 16 }}>
+          <strong style={{ display: 'inline-block', marginBottom: 8 }}>题目内容：</strong>
+          <div style={{ 
+            padding: 12, 
+            background: '#f5f5f5', 
+            borderRadius: 4,
+            lineHeight: 1.6,
+            wordBreak: 'break-word',
+            whiteSpace: 'pre-wrap'
+          }}>
             {question.content}
           </div>
         </div>
-        {question.options && (
-          <div>
-            <strong>选项：</strong>
-            <ul style={{ marginTop: 8, paddingLeft: 20 }}>
-              {question.options.map((option, idx) => (
-                <li key={idx}>
-                  {String.fromCharCode(65 + idx)}. {option}
-                </li>
-              ))}
-            </ul>
+        {question.options && question.options.length > 0 && (
+          <div style={{ marginBottom: 16 }}>
+            <strong style={{ display: 'inline-block', marginBottom: 8 }}>选项：</strong>
+            <div>
+              {question.options.map((option, idx) => {
+                const prefix = String.fromCharCode(65 + idx)
+                // 如果 AI 还是带了前缀，我们尝试清理掉重复显示的
+                const prefixWithDot = prefix + '. '
+                const displayOption = option.startsWith(prefixWithDot) 
+                  ? option.substring(prefixWithDot.length) 
+                  : option
+                const isCorrect = (question.type === 'single' || question.type === 'multiple') 
+                  && question.answer.toUpperCase().includes(prefix)
+                return (
+                  <div key={idx} style={{ 
+                    marginBottom: 8, 
+                    padding: '10px 12px',
+                    borderRadius: 4,
+                    lineHeight: 1.6,
+                    wordBreak: 'break-word',
+                    whiteSpace: 'pre-wrap',
+                    background: isCorrect ? '#f6ffed' : '#fafafa',
+                    border: isCorrect ? '1px solid #b7eb8f' : '1px solid #e8e8e8'
+                  }}>
+                    <span style={{ 
+                      fontWeight: isCorrect ? 600 : 500,
+                      color: isCorrect ? '#52c41a' : '#333',
+                      marginRight: 4
+                    }}>
+                      {prefix}.
+                    </span>
+                    {displayOption}
+                  </div>
+                )
+              })}
+            </div>
           </div>
         )}
         {question.answer && (
-          <div style={{ marginTop: 12 }}>
-            <strong>参考答案：</strong>
-            <span style={{ color: '#52c41a', fontWeight: 500 }}>
-              {question.answer}
-            </span>
+          <div style={{ marginBottom: question.explanation ? 8 : 0 }}>
+            <Tag color="success" style={{ marginBottom: question.explanation ? 0 : undefined }}>
+              参考答案：{question.type === 'single' || question.type === 'multiple' 
+                ? question.answer.toUpperCase().split(/[.．\s]+/).shift() 
+                : question.answer}
+            </Tag>
           </div>
         )}
         {question.explanation && (
-          <div style={{ marginTop: 8 }}>
+          <div style={{
+            lineHeight: 1.6,
+            wordBreak: 'break-word',
+            whiteSpace: 'pre-wrap'
+          }}>
             <strong>解析：</strong>
-            <span style={{ color: '#8c8c8c' }}>{question.explanation}</span>
+            <span style={{ color: '#666' }}>{question.explanation}</span>
           </div>
         )}
       </Card>
@@ -242,16 +398,8 @@ const AIQuestionGenerator = () => {
                 icon={<RobotOutlined />}
                 loading={loading}
               >
-                生成题目
+                {generatedQuestions.length > 0 ? '生成新题目' : '生成题目'}
               </Button>
-              {generatedQuestions.length > 0 && (
-                <Button 
-                  icon={<ReloadOutlined />}
-                  onClick={handleRegenerate}
-                >
-                  重新生成
-                </Button>
-              )}
             </Space>
           </Form.Item>
         </Form>
@@ -260,17 +408,30 @@ const AIQuestionGenerator = () => {
       {generatedQuestions.length > 0 && (
         <>
           <Divider />
-          <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 16 }}>
-            <h2>题目预览 ({generatedQuestions.length} 道)</h2>
-            <Button 
-              type="primary" 
-              icon={<SaveOutlined />}
-              onClick={handleSaveAll}
-            >
-              全部保存到题库
-            </Button>
+
+          <div style={{ marginBottom: 16, display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+            <div>
+              <h3 style={{ margin: 0 }}>
+                <CheckCircleOutlined style={{ color: '#52c41a', marginRight: 8 }} />
+                已生成 {generatedQuestions.length} 道题目
+              </h3>
+            </div>
+            <Space>
+              <Button 
+                icon={<ReloadOutlined />}
+                onClick={handleRegenerate}
+              >
+                重新生成（同参数）
+              </Button>
+              <Button 
+                type="primary" 
+                icon={<SaveOutlined />}
+                onClick={handleSaveAll}
+              >
+                全部保存到题库
+              </Button>
+            </Space>
           </div>
-          
           <Spin spinning={loading}>
             {generatedQuestions.map((question, index) => renderQuestionPreview(question, index))}
           </Spin>
@@ -294,10 +455,13 @@ const AIQuestionGenerator = () => {
           </Form.Item>
 
           <Form.Item
-            label="选项（每行一个）"
+            label="选项（每行一个，字母前缀自动添加）"
             name="options"
           >
-            <TextArea rows={4} placeholder="A. 选项1&#10;B. 选项2&#10;C. 选项3&#10;D. 选项4" />
+            <TextArea 
+              rows={4} 
+              placeholder="选项内容直接输入即可，自动添加 A. B. C. 前缀&#10;例如：&#10;选项1&#10;选项2&#10;选项3&#10;选项4" 
+            />
           </Form.Item>
 
           <Form.Item

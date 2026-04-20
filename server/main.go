@@ -6,6 +6,7 @@ import (
 	"github.com/gin-gonic/gin"
 	"g-design-server/config"
 	"g-design-server/models"
+	"g-design-server/redis"
 	"g-design-server/routes"
 )
 
@@ -18,6 +19,11 @@ func main() {
 		log.Fatalf("Failed to connect to database: %v", err)
 	}
 	defer models.CloseDB()
+
+	if err := redis.InitRedis(); err != nil {
+		log.Printf("Warning: Redis connection failed: %v", err)
+	}
+	defer redis.CloseRedis()
 
 	if err := models.AutoMigrate(); err != nil {
 		log.Fatalf("Failed to migrate database: %v", err)

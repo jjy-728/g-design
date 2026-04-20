@@ -1,33 +1,62 @@
 import React, { createContext, useContext, useState, useEffect, useCallback } from 'react'
+import { useNavigate } from 'react-router-dom'
 import { getToken, setToken, getUserInfo, setUserInfo, clearAuth } from '@/utils/auth'
+import request from '@/utils/request'
 
 const AuthContext = createContext(null)
 
 export const AuthProvider = ({ children }) => {
   const [user, setUser] = useState(null)
   const [loading, setLoading] = useState(true)
+  const navigate = useNavigate()
+
+  const verifyToken = useCallback(async () => {
+    const token = getToken()
+    
+    if (!token) {
+      setLoading(false)
+      return
+    }
+
+    try {
+      const freshUserInfo = await request.get('/user/current')
+      const userWithRole = {
+        ...freshUserInfo,
+        role: freshUserInfo.roleName,
+        permissions: freshUserInfo.permissions?.map(p => p.name) || []
+      }
+      setUser(userWithRole)
+      setUserInfo(userWithRole)
+    } catch (error) {
+      console.error('Token verification failed:', error)
+      clearAuth()
+      setUser(null)
+      navigate('/login', { replace: true })
+    } finally {
+      setLoading(false)
+    }
+  }, [navigate])
 
   useEffect(() => {
-    const token = getToken()
-    const userInfo = getUserInfo()
-    
-    if (token && userInfo) {
-      setUser(userInfo)
-    }
-    
-    setLoading(false)
-  }, [])
+    verifyToken()
+  }, [verifyToken])
 
   const login = useCallback((userData, token) => {
-    setUser(userData)
+    const userWithRole = {
+      ...userData,
+      role: userData.roleName,
+      permissions: userData.permissions?.map(p => p.name) || userData.permissions || []
+    }
+    setUser(userWithRole)
     setToken(token)
-    setUserInfo(userData)
+    setUserInfo(userWithRole)
   }, [])
 
   const logout = useCallback(() => {
     setUser(null)
     clearAuth()
-  }, [])
+    navigate('/login', { replace: true })
+  }, [navigate])
 
   const updateUser = useCallback((userData) => {
     setUser(userData)
