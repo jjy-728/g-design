@@ -11,7 +11,6 @@ import {
   InputNumber,
   message,
   Popconfirm,
-  Upload,
   Tag
 } from 'antd'
 import {
@@ -19,8 +18,6 @@ import {
   EditOutlined,
   DeleteOutlined,
   SearchOutlined,
-  DownloadOutlined,
-  UploadOutlined,
   ReloadOutlined
 } from '@ant-design/icons'
 import request from '@/utils/request'
@@ -190,43 +187,6 @@ const QuestionBank = () => {
     } catch (error) {
       console.error('Save question error:', error)
     }
-  }
-
-  const handleExport = async () => {
-    try {
-      const response = await request.get('/questions/export', {
-        responseType: 'blob'
-      })
-      
-      const url = window.URL.createObjectURL(new Blob([response]))
-      const link = document.createElement('a')
-      link.href = url
-      link.setAttribute('download', '题目导出.xlsx')
-      document.body.appendChild(link)
-      link.click()
-      link.remove()
-      
-      message.success('导出成功')
-    } catch (error) {
-      console.error('Export error:', error)
-    }
-  }
-
-  const handleImport = async (file) => {
-    const formData = new FormData()
-    formData.append('file', file)
-    
-    try {
-      await request.post('/questions/import', formData, {
-        headers: { 'Content-Type': 'multipart/form-data' }
-      })
-      message.success('导入成功')
-      fetchQuestions()
-    } catch (error) {
-      console.error('Import error:', error)
-    }
-    
-    return false
   }
 
   const columns = [
@@ -410,21 +370,6 @@ const QuestionBank = () => {
                 </Button>
               </Popconfirm>
             )}
-            <Button
-              icon={<DownloadOutlined />}
-              onClick={handleExport}
-            >
-              导出
-            </Button>
-            <Upload
-              accept=".xlsx,.xls"
-              showUploadList={false}
-              beforeUpload={handleImport}
-            >
-              <Button icon={<UploadOutlined />}>
-                导入
-              </Button>
-            </Upload>
           </Space>
         </div>
 

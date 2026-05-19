@@ -51,7 +51,7 @@ type PermissionInfo struct {
 func Login(c *gin.Context) {
 	var req LoginRequest
 	if err := c.ShouldBindJSON(&req); err != nil {
-		utils.BadRequest(c, err.Error())
+		utils.BadRequest(c, "参数错误")
 		return
 	}
 
